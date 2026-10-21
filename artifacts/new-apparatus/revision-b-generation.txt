@@ -1,0 +1,9 @@
+Method: built-in image generation, using Revision A and the needle photograph as references.
+
+Revision brief: remove the upward needle projections from the three main views; depict the future needle pointing downward only in a separate detail; point the lower drain and meter handwheel toward the same left end of the apparatus; position both branch valve actuators on top of their horizontal pipes. Preserve apparatus geometry, four ports, tanks, frame, pump and meter. Label Revision B, not to scale.
+
+Separate image brief: generate one standalone portrait review image per view: three-quarter assembly, front elevation and narrow end-on side elevation. Keep numbered component callouts and a Future 3D reference / Not to scale footer. No other views, tables or insets.
+
+Three-quarter correction: move the red meter handwheel from right to left, parallel to lower tank drain, remove unintended horizontal blue stub and retain the vertical valve pipe.
+
+Side correction: use the narrow third main view from Revision B, looking along the base length. Tanks overlap in projection; header branches are foreshortened. Both drain outlet and handwheel face the observer in this end view, consistent with their left-end direction in the front view.
