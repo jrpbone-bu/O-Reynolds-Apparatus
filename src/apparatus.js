@@ -70,7 +70,6 @@ export function createApparatus() {
     return mesh(g,name,geo,material,[cx,y,0]);
   }
   plateWithBore(chamber,'White lower tray platform',T-L-rail,depth-rail,.08,4.25,m.white);
-  plateWithBore(chamber,'Housing chamber floor',width,tankDepth,.045,housingTop-.045,m.black);
   plateWithBore(chamber,'Housing underside with open outlet',width,tankDepth,.045,platformTop,m.black);
   for(const x of [cx-width/2+.025,cx+width/2-.025])box(chamber,'Closed black housing side',.05,housingTop-platformTop,tankDepth,m.black,x,(platformTop+housingTop)/2);
   for(const z of [-tankDepth/2+.025,tankDepth/2-.025])box(chamber,'Closed black housing end',width-.10,housingTop-platformTop,.05,m.black,cx,(platformTop+housingTop)/2,z);
@@ -141,6 +140,49 @@ export function createApparatus() {
   const wheel=mesh(meter,'Left-facing red handwheel',new THREE.TorusGeometry(.17,.033,10,32),m.red,[-2.53,2.78,0]);wheel.rotation.y=Math.PI/2;
   for(let a=0;a<3;a++){const t=a*Math.PI/3;pipe(meter,'Handwheel spoke',[-2.53,2.78-Math.cos(t)*.16,-Math.sin(t)*.16],[-2.53,2.78+Math.cos(t)*.16,Math.sin(t)*.16],.018,m.red);}
   pipe(meter,'Lower visible pipe to sealed collection cover',[-2.15,1.75,0],[-2.15,2.55,0],.09,m.tube);
+  // Component 7 detail only; preserve every existing mesh transform and connection.
+  const meterPlastic=standard('#1265b9',.05,.48), galvanized=standard('#9ba2a4',.7,.5);
+  const meterFrame=standard('#c7b991',.05,.52);meterFrame.transparent=true;meterFrame.opacity=.92;
+  function roundedMeterBox(w,h,d,r){
+    const shape=new THREE.Shape();shape.moveTo(-w/2+r,-h/2);shape.lineTo(w/2-r,-h/2);shape.quadraticCurveTo(w/2,-h/2,w/2,-h/2+r);shape.lineTo(w/2,h/2-r);shape.quadraticCurveTo(w/2,h/2,w/2-r,h/2);shape.lineTo(-w/2+r,h/2);shape.quadraticCurveTo(-w/2,h/2,-w/2,h/2-r);shape.lineTo(-w/2,-h/2+r);shape.quadraticCurveTo(-w/2,-h/2,-w/2+r,-h/2);
+    const geometry=new THREE.ExtrudeGeometry(shape,{depth:d-.012,bevelEnabled:true,bevelThickness:.006,bevelSize:.006,bevelSegments:2,curveSegments:4});geometry.center();
+    const bounds=new THREE.Box3().setFromBufferAttribute(geometry.attributes.position),size=bounds.getSize(new THREE.Vector3());geometry.scale(w/size.x,h/size.y,d/size.z);return geometry;
+  }
+  const meterBody=meter.getObjectByName('Inline digital flow meter');meterBody.geometry.dispose();meterBody.geometry=roundedMeterBox(.40,.57,.34,.035);meterBody.material=meterFrame;
+  const blueFace=meter.getObjectByName('Blue meter display');blueFace.geometry.dispose();blueFace.geometry=roundedMeterBox(.25,.35,.025,.022);blueFace.material=meterPlastic;
+  for(const part of meter.children)if(part.name==='Outlet blue union')part.material=meterPlastic;
+  for(const y of [4.15,3.70,2.15,2.47])pipe(meter,'PVC coupling inset lip',[-2.15,y-.006,0],[-2.15,y+.006,0],.125,meterPlastic);
+  for(const y of [3.74,3.02]){
+    mesh(meter,'Galvanized hex fitting',new THREE.CylinderGeometry(.086,.086,.07,6),galvanized,[-2.15,y,0]);
+    pipe(meter,'Galvanized threaded neck',[-2.15,y+.035,0],[-2.15,y+.085,0],.074,galvanized);
+    for(let i=0;i<6;i++)pipe(meter,'Fine fitting thread',[-2.15,y+.038+i*.008,0],[-2.15,y+.041+i*.008,0],.081,galvanized);
+  }
+  for(const y of [3.09,3.61])pipe(meter,'Meter inlet / outlet neck',[-2.15,y-.024,0],[-2.15,y+.024,0],.085,galvanized);
+  const lcdMaterial=standard('#b6d0c9',.1,.2);
+  if(typeof document!=='undefined'){
+    const displayCanvas=document.createElement('canvas');displayCanvas.width=256;displayCanvas.height=224;
+    const displayContext=displayCanvas.getContext('2d');displayContext.fillStyle='#202d31';displayContext.fillRect(0,0,256,224);displayContext.fillStyle='#b6d0c9';displayContext.fillRect(9,40,238,175);
+    displayContext.textAlign='center';displayContext.fillStyle='#eef2e8';displayContext.font='bold 29px sans-serif';displayContext.fillText('K24',128,30);displayContext.fillStyle='#243a36';displayContext.font='64px monospace';displayContext.fillText('00.0',128,151);
+    const displayTexture=new THREE.CanvasTexture(displayCanvas);displayTexture.colorSpace=THREE.SRGBColorSpace;lcdMaterial.map=displayTexture;
+  }
+  meter.getObjectByName('LCD').material=lcdMaterial;
+  const lcdCover=standard('#e4f4f1',.05,.12);lcdCover.transparent=true;lcdCover.opacity=.12;
+  box(meter,'Glossy recessed LCD cover',.148,.128,.001,lcdCover,-2.15,3.38,.2075);
+  for(const [y,icon] of [[3.24,'reset'],[3.30,'power']]){
+    const button=mesh(meter,'K24 '+icon+' button',new THREE.CylinderGeometry(.016,.016,.006,24),meterFrame,[-2.252,y,.200]);button.rotation.x=Math.PI/2;
+    const ring=mesh(meter,'Button icon ring',new THREE.TorusGeometry(.009,.0015,4,24),galvanized,[-2.252,y,.204]);
+    if(icon==='power')pipe(meter,'Power icon stroke',[-2.252,y+.004,.205],[-2.252,y+.013,.205],.0015,galvanized);
+  }
+  meter.position.x=-2.15;
+  for(const part of meter.children)part.position.x+=2.15;
+  const valveFacing=new THREE.Group();meter.add(valveFacing);
+  for(const part of [...meter.children])if(['Handwheel spindle facing left','Left-facing red handwheel','Handwheel spoke'].includes(part.name))valveFacing.add(part);
+  valveFacing.rotation.y=Math.PI/2;
+  // Add the hub and two extra spokes in the wheel's existing local plane.
+  pipe(valveFacing,'Red handwheel center hub',[-.406,2.78,0],[-.355,2.78,0],.045,m.red);
+  pipe(valveFacing,'Handwheel center bolt',[-.411,2.78,0],[-.406,2.78,0],.022,galvanized);
+  for(const t of [Math.PI/6,Math.PI/6+Math.PI])pipe(valveFacing,'Additional handwheel spoke',[-.38,2.78,0],[-.38,2.78+Math.cos(t)*.15,Math.sin(t)*.15],.018,m.red);
+  meter.rotation.y=Math.atan2(.24,.975)-Math.PI/2;
   model.userData={revision:'Top Glass Tank',units:'relative; dimensions unmeasured',reference:'Revision K plus construction photographs'};
   return model;
 }
