@@ -93,14 +93,15 @@ export function createApparatus() {
   for(const x of [cx-.66,cx+.66])box(cap,'02 upper glass holder side wall',.012,.65,1.2,m.glass,x,holderBase+.325);
   for(const z of [-.60,.60])box(cap,'02 upper glass holder end wall',1.308,.65,.012,m.glass,cx,holderBase+.325,z);
   panelEdges(cap,1.32,.65,1.2,cx,holderBase+.325);
-  pipe(artifact,'Thin central pipe through holder and divider',[cx,4.93,0],[cx,holderBase+.04,0],.025,m.tube);
+  const sleeveBottom=4.12, sleeveTop=housingTop-.08, outer=.095, inner=.065;
+  pipe(artifact,'Thin central pipe through holder and divider',[cx,sleeveTop-.02,0],[cx,holderBase+.04,0],.025,m.tube);
   // Open white sleeve: outer/inner surfaces and annular rims, no solid end caps.
-  const sleeveBottom=4.12,sleeveTop=4.95,outer=.095,inner=.065;
+  // Recess the open sleeve beneath the solid cover, inside the hollow housing.
   mesh(chamber,'White hollow needle sleeve outer',new THREE.CylinderGeometry(outer,outer,sleeveTop-sleeveBottom,40,1,true),m.white,[cx,(sleeveTop+sleeveBottom)/2,0]);
   const innerMat=m.white.clone();innerMat.side=THREE.BackSide;
   mesh(chamber,'White hollow needle sleeve inner',new THREE.CylinderGeometry(inner,inner,sleeveTop-sleeveBottom,40,1,true),innerMat,[cx,(sleeveTop+sleeveBottom)/2,0]);
   for(const y of [sleeveBottom,sleeveTop]){const rim=mesh(chamber,'Open annular sleeve rim',new THREE.RingGeometry(inner,outer,40),m.white,[cx,y,0]);rim.rotation.x=y===sleeveTop?-Math.PI/2:Math.PI/2;}
-  const needle=pipe(chamber,'Concealed downward needle',[cx,4.91,0],[cx,4.57,0],.008,m.steel);needle.userData.hiddenInsideCylinder=true;
+  const needle=pipe(chamber,'Concealed downward needle',[cx,sleeveTop-.04,0],[cx,sleeveTop-.22,0],.008,m.steel);needle.userData.hiddenInsideCylinder=true;
   const plumbing=group('05 + 06 — blue header and rear valve controls');
   const headerX=1.35, portZ=0;
   portYs.forEach((y,i)=>{
