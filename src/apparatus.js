@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Relative dimensions follow Revision K; photographs resolve depth and construction.
 export function createApparatus() {
   const model = new THREE.Group();
-  model.name = 'Revision K apparatus';
+  model.name = 'Top Glass Tank — approved experimental assembly';
   const standard=(color,metalness=0,roughness=.4)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
   const m={black:standard('#20262b',.55),blue:standard('#0874e5',.15,.25),steel:standard('#bcc9cd',.75),white:standard('#efece0'),brass:standard('#bd8d35',.6),red:standard('#d33025'),orange:standard('#f16b16'),green:standard('#127845'),bead:standard('#e2e7df'),screen:standard('#0962b4'),edge:standard('#40acb9',.2)};
   m.glass=new THREE.MeshBasicMaterial({color:'#8cdee8',transparent:true,opacity:.10,side:THREE.DoubleSide,depthWrite:false});
@@ -52,25 +52,57 @@ export function createApparatus() {
   pipe(collection,'Drain top spindle',[-3.46,.56,.25],[-3.46,.78,.25],.043,m.brass);
   box(collection,'Drain top butterfly',.30,.055,.11,m.orange,-3.46,.79,.25);
   const reservoir=group('10 — open reservoir');tank(reservoir,'10 reservoir',1.91,1.145,2.30,1.73,1.46,false,true);
-  const chamber=group('04 — main chamber with aligned internal ports');
-  // White chamber seat and lower platform remain inside the retained guardrails.
-  box(chamber,'White lower tray platform',T-L-rail,.08,depth-rail,m.white,-2.15,4.29);
-  pipe(chamber,'Thin central clear tube',[-2.15,5.05,0],[-2.15,7.79,0],.025,m.tube);
-  pipe(chamber,'Plain nonmetal white cylinder',[-2.15,4.82,0],[-2.15,5.22,0],.095,m.white);
-  const needle=pipe(chamber,'Hidden downward needle inside white cylinder',[-2.15,5.18,0],[-2.15,4.87,0],.012,m.steel);
-  needle.userData.hiddenInsideCylinder=true;
-  pipe(chamber,'Internal outlet connection',[-2.15,4.87,0],[-2.15,4.29,0],.045,m.white);
-  const cap=group('02 + 03 — detachable upper vessel and glass enclosure');cap.userData.detachable=true;
-  // The glass holder and its support move with the raised frame; the chamber cap stays below the open gap.
-  // One solid floor sits on the frame, with no coplanar glass or duplicate floor faces.
-  const holderBase=8.0+upperFrameRise+.05+.045;
-  for(const x of [-2.81,-1.49])box(cap,'02 upper glass holder side wall',.012,.65,1.2,m.glass,x,holderBase+.325);
-  for(const z of [-.60,.60])box(cap,'02 upper glass holder end wall',1.308,.65,.012,m.glass,-2.15,holderBase+.325,z);
-  panelEdges(cap,1.32,.65,1.2,-2.15,holderBase+.325);
-  pipe(cap,'Thin pipe through hollow upper frame',[-2.15,7.73,0],[-2.15,holderBase,0],.025,m.tube);
-  pipe(cap,'Glass holder pipe mounting sleeve',[-2.15,holderBase-.10,0],[-2.15,holderBase+.025,0],.044,m.white);
+  const artifact=group('Top Glass Tank — complete inset assembly');
+  const cx=-2.15, width=1.74, tankDepth=1.39, post=.105;
+  const platformTop=4.33, housingTop=4.69, dividerY=7.95;
+  const holderBase=8.0+upperFrameRise+.05+.045, topPlateBottom=holderBase-.16;
+  const portYs=[7.42,6.85,6.10,5.49];
+  artifact.userData={clearance:.05,width,depth:tankDepth,platformTop,housingTop,dividerY};
+  const chamber=new THREE.Group();chamber.name='04 — enclosed glass chamber';artifact.add(chamber);
+  const cap=new THREE.Group();cap.name='02 + 03 — detachable holder, top support and divider';cap.userData.detachable=true;artifact.add(cap);
+  const grayGlass=new THREE.MeshBasicMaterial({color:'#c5d5d6',transparent:true,opacity:.13,side:THREE.DoubleSide,depthWrite:false});
+
+  // Real holes avoid coincident caps and preserve open bores through every horizontal plate.
+  function plateWithBore(g,name,w,d,thickness,y,material,r=.10){
+    const shape=new THREE.Shape();shape.moveTo(-w/2,-d/2);shape.lineTo(w/2,-d/2);shape.lineTo(w/2,d/2);shape.lineTo(-w/2,d/2);shape.closePath();
+    const hole=new THREE.Path();hole.absarc(0,0,r,0,Math.PI*2,true);shape.holes.push(hole);
+    const geo=new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false,curveSegments:40});geo.rotateX(-Math.PI/2);
+    return mesh(g,name,geo,material,[cx,y,0]);
+  }
+  plateWithBore(chamber,'White lower tray platform',T-L-rail,depth-rail,.08,4.25,m.white);
+  plateWithBore(chamber,'Housing chamber floor',width,tankDepth,.045,housingTop-.045,m.black);
+  plateWithBore(chamber,'Housing underside with open outlet',width,tankDepth,.045,platformTop,m.black);
+  for(const x of [cx-width/2+.025,cx+width/2-.025])box(chamber,'Closed black housing side',.05,housingTop-platformTop,tankDepth,m.black,x,(platformTop+housingTop)/2);
+  for(const z of [-tankDepth/2+.025,tankDepth/2-.025])box(chamber,'Closed black housing end',width-.10,housingTop-platformTop,.05,m.black,cx,(platformTop+housingTop)/2,z);
+  for(const x of [cx-width/2+post/2,cx+width/2-post/2])for(const z of [-tankDepth/2+post/2,tankDepth/2-post/2]){
+    box(artifact,'Flush corner pillar',post,topPlateBottom-housingTop,post,m.black,x,(housingTop+topPlateBottom)/2,z);
+  }
+  // Four clear wall panels; the right wall has four actual coaxial pipe penetrations.
+  const glassBottom=housingTop, glassHeight=dividerY-glassBottom, glassCenter=(dividerY+glassBottom)/2;
+  const left=box(chamber,'Left glass wall',.012,glassHeight,tankDepth-2*post,grayGlass,cx-width/2+.012,glassCenter);
+  for(const z of [-tankDepth/2+.012,tankDepth/2-.012])box(chamber,'Front / rear glass wall',width-2*post,glassHeight,.012,grayGlass,cx,glassCenter,z);
+  const side=new THREE.Shape();const halfDepth=(tankDepth-2*post)/2;
+  side.moveTo(-halfDepth,glassBottom);side.lineTo(halfDepth,glassBottom);side.lineTo(halfDepth,dividerY);side.lineTo(-halfDepth,dividerY);side.closePath();
+  for(const y of portYs){const hole=new THREE.Path();hole.absarc(0,y,.142,0,Math.PI*2,true);side.holes.push(hole);}
+  const wallGeo=new THREE.ShapeGeometry(side,40);wallGeo.rotateY(Math.PI/2);
+  mesh(chamber,'Right glass wall with four port openings',wallGeo,grayGlass,[cx+width/2-.012,0,0]);
+  plateWithBore(cap,'Horizontal glass divider',width,tankDepth,.035,dividerY,m.glass,.033);
+  panelEdges(cap,width,.035,tankDepth,cx,dividerY+.0175);
+  plateWithBore(cap,'Black top support',width,tankDepth,.13,topPlateBottom,m.black,.035);
+  plateWithBore(cap,'White top holder base',width,tankDepth,.03,holderBase-.03,m.white,.035);
+  for(const x of [cx-.66,cx+.66])box(cap,'02 upper glass holder side wall',.012,.65,1.2,m.glass,x,holderBase+.325);
+  for(const z of [-.60,.60])box(cap,'02 upper glass holder end wall',1.308,.65,.012,m.glass,cx,holderBase+.325,z);
+  panelEdges(cap,1.32,.65,1.2,cx,holderBase+.325);
+  pipe(artifact,'Thin central pipe through holder and divider',[cx,4.93,0],[cx,holderBase+.04,0],.025,m.tube);
+  // Open white sleeve: outer/inner surfaces and annular rims, no solid end caps.
+  const sleeveBottom=4.12,sleeveTop=4.95,outer=.095,inner=.065;
+  mesh(chamber,'White hollow needle sleeve outer',new THREE.CylinderGeometry(outer,outer,sleeveTop-sleeveBottom,40,1,true),m.white,[cx,(sleeveTop+sleeveBottom)/2,0]);
+  const innerMat=m.white.clone();innerMat.side=THREE.BackSide;
+  mesh(chamber,'White hollow needle sleeve inner',new THREE.CylinderGeometry(inner,inner,sleeveTop-sleeveBottom,40,1,true),innerMat,[cx,(sleeveTop+sleeveBottom)/2,0]);
+  for(const y of [sleeveBottom,sleeveTop]){const rim=mesh(chamber,'Open annular sleeve rim',new THREE.RingGeometry(inner,outer,40),m.white,[cx,y,0]);rim.rotation.x=y===sleeveTop?-Math.PI/2:Math.PI/2;}
+  const needle=pipe(chamber,'Concealed downward needle',[cx,4.91,0],[cx,4.57,0],.008,m.steel);needle.userData.hiddenInsideCylinder=true;
   const plumbing=group('05 + 06 — blue header and rear valve controls');
-  const portYs=[7.42,6.85,6.10,5.49], headerX=1.35, portZ=0;
+  const headerX=1.35, portZ=0;
   portYs.forEach((y,i)=>{
     const end=i===3?-.25:headerX;
     pipe(plumbing,'P'+(i+1)+' coaxial chamber-to-exterior pipe',[-1.84,y,portZ],[end,y,portZ],.105);
@@ -98,8 +130,8 @@ export function createApparatus() {
   for(const z of [-.24,.24])box(pump,'Bolted pump foot',.94,.09,.13,m.black,-.26,.32,z);
   pipe(pump,'Top discharge fitting',[-.25,.67,0],[-.25,.80,0],.125,m.black);
   const meter=group('07 — vertical flow meter and left-facing handwheel');
-  pipe(meter,'Visible upper outlet pipe',[-2.15,3.67,0],[-2.15,4.30,0],.09,m.tube);
-  for(const y of [3.67,4.28,2.13,2.45])pipe(meter,'Outlet blue union',[-2.15,y-.045,0],[-2.15,y+.045,0],.128);
+  pipe(meter,'Visible upper outlet pipe',[-2.15,3.67,0],[-2.15,4.12,0],.09,m.tube);
+  for(const y of [3.67,4.12,2.13,2.45])pipe(meter,'Outlet blue union',[-2.15,y-.045,0],[-2.15,y+.045,0],.128);
   box(meter,'Inline digital flow meter',.40,.57,.34,m.white,-2.15,3.35);
   box(meter,'Blue meter display',.25,.35,.025,m.screen,-2.15,3.35,.184);
   box(meter,'LCD',.16,.14,.012,m.black,-2.15,3.38,.202);
@@ -108,7 +140,7 @@ export function createApparatus() {
   const wheel=mesh(meter,'Left-facing red handwheel',new THREE.TorusGeometry(.17,.033,10,32),m.red,[-2.53,2.78,0]);wheel.rotation.y=Math.PI/2;
   for(let a=0;a<3;a++){const t=a*Math.PI/3;pipe(meter,'Handwheel spoke',[-2.53,2.78-Math.cos(t)*.16,-Math.sin(t)*.16],[-2.53,2.78+Math.cos(t)*.16,Math.sin(t)*.16],.018,m.red);}
   pipe(meter,'Lower visible pipe to sealed collection cover',[-2.15,1.75,0],[-2.15,2.55,0],.09,m.tube);
-  model.userData={revision:'K',units:'relative; dimensions unmeasured',reference:'Revision K plus construction photographs'};
+  model.userData={revision:'Top Glass Tank',units:'relative; dimensions unmeasured',reference:'Revision K plus construction photographs'};
   return model;
 }
 

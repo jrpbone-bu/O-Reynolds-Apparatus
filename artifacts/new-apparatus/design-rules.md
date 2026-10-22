@@ -124,3 +124,21 @@ These are connection rules, not a prediction of actual flow rates or branch flow
 - Meter/valve and the straight pipe sections above and below remain accessible and unobstructed.
 - No pipe/frame/glass solid collisions, unsupported tank bottoms, or hoses used as structural members.
 - No upward-projecting needle or superseded extra reservoir-side upright.
+
+
+## Top Glass Tank branch — approved replacement assembly
+
+This section supersedes earlier upper-tower geometry rules on branch `Top-Glass-Tank`. Reference: `top-glass-tank-approved.png`; clear top holder and white top mounting surface are controlling.
+
+- Keep the existing white platform and all guardrails, four lower corner pillars, and perimeter edging unchanged. The new assembly rests on the platform, not the rails.
+- Fit the complete assembly inside the rail opening with a small uniform clearance on all four sides. No overlap or outward overhang. In the relative model the opening is 1.84 by 1.49, artifact 1.74 by 1.39, giving 0.05 clearance per side.
+- Four black full-height pillars align flush with both the closed black lower housing and the black upper support. Their outer footprints match; no inset or plate overhang.
+- A white mounting surface supports the separate small clear open-top glass holder. The holder is centered and grouped with the removable top support and horizontal glass divider.
+- A horizontal glass divider separates a short open upper bay from the tall main chamber. Enclose all four sides below that pane with continuous slightly gray clear glass, down to the top of the lower housing. Keep the upper bay open.
+- Use nonrefractive transparency; rails, posts and pipe centerlines must never appear offset or duplicated through the glass.
+- All four existing blue horizontal pipes pass through real right-wall openings, extending left inside the chamber on their original exterior centerlines. Upper three connect to the common reservoir header. Lowest port retains its independent pump riser.
+- Keep one very thin centered pipe from the top holder through the divider down to a plain white hollow sleeve. The needle is concealed inside this sleeve and points downward.
+- The lower black housing is enclosed on all exterior sides, with a centered outlet passage. It may be hollow internally. The white sleeve continues through the housing and platform and remains open below; no blue parts on the sleeve.
+- Connect the white outlet coaxially and continuously to the pipe above component 7. Keep component 7, tanks 8 and 10, pump, hoses, and valves in their existing positions.
+- Do not restore media balls or the former separate black cylindrical cover.
+- Dimensions remain relative and unmeasured; clearances are visual design proportions, not fabrication tolerances.
