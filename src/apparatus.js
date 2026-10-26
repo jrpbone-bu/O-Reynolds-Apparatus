@@ -190,20 +190,36 @@ export function createApparatus() {
   pipe(valveFacing,'Handwheel center bolt',[-.411,2.78,0],[-.406,2.78,0],.022,galvanized);
   for(const t of [Math.PI/6,Math.PI/6+Math.PI])pipe(valveFacing,'Additional handwheel spoke',[-.38,2.78,0],[-.38,2.78+Math.cos(t)*.15,Math.sin(t)*.15],.018,m.red);
   meter.rotation.y=Math.atan2(.24,.975)-Math.PI/2;
-  const topGroup=new THREE.Group();topGroup.name='topGroup';topGroup.position.set(cx,dividerY,0);artifact.add(topGroup);
-  model.updateMatrixWorld(true);
-  topGroup.attach(cap);
-  for(const pillar of upperPillars)topGroup.attach(pillar);
-  topGroup.attach(thinPipe);
-  topGroup.attach(needle);
   const needleCollar=mesh(chamber,'Needle to thin pipe joint collar',new THREE.LatheGeometry([new THREE.Vector2(.009,-.005),new THREE.Vector2(.028,-.005),new THREE.Vector2(.028,.005),new THREE.Vector2(.009,.005),new THREE.Vector2(.009,-.005)],24),m.tube,[cx,sleeveTop-.02,0]);
-  topGroup.attach(needleCollar);
-  const chamberGroup=new THREE.Group();chamberGroup.name='chamberGroup';chamberGroup.position.set(cx,platformTop,0);chamberGroup.userData.partId='chamber';artifact.add(chamberGroup);
+  // Regroup every rendered object by the parts named in the Reynolds Apparatus document.
+  // attach() keeps each world transform, so the assembly looks exactly as before.
+  const PARTS=['Dye Injection Site','Pipe for Dye','Upper Water Tank','Control Valves','Flow Visualization Pipe Section','Flow Meter','Lower Water Tank & Water Pump','Drainage Tank'];
+  const OTHER={frame:'Not in PDF: Frame',piping:'Not in PDF: Piping'};
+  const dyePipeNames=['Thin central pipe through holder and divider','Needle to thin pipe joint collar','Concealed downward needle','White hollow needle sleeve outer','White hollow needle sleeve inner','Open annular sleeve rim'];
+  const valveNames=['Valve body','Rear-facing valve spindle','Rear upright butterfly control','Vertical brass handwheel valve','Handwheel spindle facing left','Left-facing red handwheel','Handwheel spoke','Additional handwheel spoke','Red handwheel center hub','Handwheel center bolt'];
+  const visualizationNames=['Visible upper outlet pipe','Lower visible pipe to sealed collection cover'];
+  function partFor(object,source){
+    if(source===frame||object.name==='White lower tray platform')return OTHER.frame;
+    if(source===collection)return 'Drainage Tank';
+    if(source===reservoir||source===pump)return 'Lower Water Tank & Water Pump';
+    if(valveNames.includes(object.name))return 'Control Valves';
+    if(source===plumbing)return OTHER.piping;
+    if(source===meter)return visualizationNames.includes(object.name)?'Flow Visualization Pipe Section':'Flow Meter';
+    if(dyePipeNames.includes(object.name))return 'Pipe for Dye';
+    // The glass divider and its edge lines are the lid of the upper water tank.
+    if(object.name==='Horizontal glass divider'||(object.isLineSegments&&Math.abs(object.position.y-(dividerY+.0175))<1e-6))return 'Upper Water Tank';
+    if(object.parent===cap||object.name==='Upper support pillar')return 'Dye Injection Site';
+    return 'Upper Water Tank';
+  }
   model.updateMatrixWorld(true);
-  const chamberParts=[];
-  model.traverse(object=>{if(['Left glass wall','Front / rear glass wall','Right glass wall with four port openings','Flush corner pillar','Housing underside with open outlet','Closed black housing side','Closed black housing end'].includes(object.name))chamberParts.push(object);});
-  for(const object of chamberParts)chamberGroup.attach(object);
-  if(typeof window!=='undefined'){window.topGroup=topGroup;window.chamberGroup=chamberGroup;}
+  const assignments=[];
+  for(const source of [...model.children])source.traverse(object=>{if(object.isMesh||object.isLineSegments)assignments.push([object,partFor(object,source)]);});
+  const partGroups={};
+  for(const name of [...PARTS,...Object.values(OTHER)]){const g=new THREE.Group();g.name=name;if(PARTS.includes(name))g.userData.partId=name;partGroups[name]=g;}
+  const previousContainers=[...model.children];
+  for(const g of Object.values(partGroups))model.add(g);
+  for(const [object,name] of assignments)partGroups[name].attach(object);
+  for(const container of previousContainers)container.removeFromParent();
   model.userData={revision:'Top Glass Tank',units:'relative; dimensions unmeasured',reference:'Revision K plus construction photographs'};
   return model;
 }

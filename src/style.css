@@ -5,10 +5,12 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:no
 #loading{position:absolute;inset:0;display:grid;place-items:center;margin:0;font:14px sans-serif;color:#858585;pointer-events:none}
 #loading img{display:block;width:min(70vw,320px);height:auto;max-height:70dvh;object-fit:contain}
 
-#part-info{position:absolute;z-index:2;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);transform:translate(-50%,8px);width:min(90%,380px);padding:16px 42px 16px 18px;border:1px solid #dce0d5;border-radius:12px;background:#fcfdfaf2;box-shadow:0 7px 30px #283a3018;color:#485144;font:13px/1.5 sans-serif;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s,transform .2s,visibility .2s}
-#part-info.is-visible{opacity:1;visibility:visible;pointer-events:auto;transform:translate(-50%,0)}
-#part-info.at-top{top:calc(env(safe-area-inset-top,0px) + 16px);bottom:auto}
-#part-info strong{display:block;font-size:14px}#part-info p{margin:5px 0 0}
-#part-info-close{position:absolute;right:6px;top:6px;width:36px;height:36px;border:0;border-radius:8px;background:transparent;color:inherit;font:24px sans-serif;cursor:pointer}
-
-.part-chips{display:flex;justify-content:center;align-items:center;gap:12px;width:calc(100% + 60px);margin:10px -42px 0 -18px}.part-chips[hidden]{display:none}.part-chips button{min-height:44px;min-width:44px;padding:0 14px;border:1px solid #dce0d5;border-radius:9px;background:#fcfdfa;color:inherit;font:inherit;cursor:pointer}
+/* Part description panel: always docked at the bottom. Mobile first. */
+#part-info{position:absolute;z-index:2;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);max-height:30dvh;overflow-y:auto;padding:14px 52px 16px 16px;border:1px solid #dce0d5;border-radius:14px;background:#fcfdfaf5;box-shadow:0 7px 30px #283a3018;color:#485144;font:15px/1.5 sans-serif;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(12px);transition:opacity .2s,transform .2s,visibility .2s}
+#part-info.is-visible{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0)}
+#part-info strong{display:block;font-size:17px;color:#2f372d}#part-info p{margin:6px 0 0}
+#part-info-close{position:absolute;right:4px;top:4px;width:44px;height:44px;border:0;border-radius:10px;background:transparent;color:inherit;font:26px sans-serif;cursor:pointer}
+@media (min-width:768px){
+  #part-info{left:50%;right:auto;width:min(480px,calc(100% - 24px));bottom:calc(env(safe-area-inset-bottom,0px) + 24px);transform:translate(-50%,12px)}
+  #part-info.is-visible{transform:translate(-50%,0)}
+}
