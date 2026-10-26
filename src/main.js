@@ -74,8 +74,10 @@ try {
     return distance;
   }
   function fitDistance(){return distanceToFit(bounds,center,HOME_DIRECTION,1/1.14,0);}
-  function homeView(){
-    return {target:center.clone(),position:center.clone().addScaledVector(HOME_DIRECTION,THREE.MathUtils.clamp(fitDistance(),controls.minDistance,controls.maxDistance)),offset:0};
+  // The fitted starting view; with a panel offset the whole apparatus fits above the panel.
+  function homeView(offset=0){
+    const distance=distanceToFit(bounds,center,HOME_DIRECTION,1/1.14,offset);
+    return {target:center.clone(),position:center.clone().addScaledVector(HOME_DIRECTION,THREE.MathUtils.clamp(distance,controls.minDistance,controls.maxDistance)),offset};
   }
   let previousFit=0,selectedPart=null;
   function resize(){
@@ -98,7 +100,7 @@ try {
     'Dye Injection Site':'Located at the top of the system, this component introduces the concentrated dye solution into the water flow to make flow patterns visible.',
     'Pipe for Dye':'Directs the injected dye from the dye site into the main stream of water flowing inside the apparatus.',
     'Upper Water Tank':'Serves as a water reservoir that supplies water continuously to maintain a steady and controlled flow head during testing.',
-    'Control Valves':'Installed at different points in the piping system to adjust and regulate the volumetric flow rate and pressure of water.',
+    'Control Valve':'Installed at different points in the piping system to adjust and regulate the volumetric flow rate and pressure of water.',
     'Flow Visualization Pipe Section':'A transparent pipe section where the dye mixes with the moving water stream, allowing users to visually observe laminar, transitional, or turbulent flow behavior.',
     'Flow Meter':'A precision measurement device used to measure the volumetric flow rate of water flowing through the system.',
     'Lower Water Tank & Water Pump':'The lower tank stores water at the base, while the water pump recirculates it back to the upper water tank to ensure continuous operation.',
@@ -107,20 +109,21 @@ try {
   const partGroups=Object.fromEntries(model.children.filter(group=>group.userData.partId).map(group=>[group.userData.partId,group]));
   // Thin parts get an enlarged, invisible tap area per mesh so they can be hit with a finger.
   const smallPartMeshes=[];
-  for(const name of ['Pipe for Dye','Flow Visualization Pipe Section','Control Valves'])partGroups[name].traverse(object=>{if(object.isMesh)smallPartMeshes.push(object);});
+  for(const name of ['Pipe for Dye','Flow Visualization Pipe Section','Control Valve'])partGroups[name].traverse(object=>{if(object.isMesh)smallPartMeshes.push(object);});
   const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2(), activePointers=new Set();
   let tapStart=null;
   const partOf=object=>{for(let node=object;node;node=node.parent)if(node.userData.partId)return node.userData.partId;return null;};
   const isGlass=object=>{const materials=Array.isArray(object.material)?object.material:[object.material];return materials.every(material=>material.transparent&&material.opacity<GLASS_OPACITY);};
+  // Returns the tapped part and the mesh that was hit, or null.
   function partAtPointer(event){
     const rect=renderer.domElement.getBoundingClientRect();
     pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
     camera.updateMatrixWorld(true);raycaster.setFromCamera(pointer,camera);
     // Glass lets taps through to what is inside it; the first solid surface decides.
-    let glassPart=null,solid=null;
+    let glass=null,solid=null;
     for(const hit of raycaster.intersectObject(model,true)){
       if(!hit.object.isMesh||hit.object.userData.isHighlight)continue;
-      if(isGlass(hit.object)){glassPart??=partOf(hit.object);continue;}
+      if(isGlass(hit.object)){if(!glass&&partOf(hit.object))glass=hit.object;continue;}
       solid=hit;break;
     }
     const worldPerPixel=distance=>2*distance*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))/(viewport.clientHeight+panelOffset);
@@ -130,23 +133,50 @@ try {
       box.setFromObject(object);
       const minimum=MIN_TOUCH_PX*worldPerPixel(camera.position.distanceTo(box.getCenter(hitPoint))),size=box.getSize(new THREE.Vector3());
       box.expandByVector(new THREE.Vector3(Math.max(0,minimum-size.x)/2,Math.max(0,minimum-size.y)/2,Math.max(0,minimum-size.z)/2));
-      if(raycaster.ray.intersectBox(box,hitPoint)){const distance=hitPoint.distanceTo(raycaster.ray.origin);if(!near||distance<near.distance)near={distance,part:partOf(object)};}
+      if(raycaster.ray.intersectBox(box,hitPoint)){const distance=hitPoint.distanceTo(raycaster.ray.origin);if(!near||distance<near.distance)near={distance,mesh:object};}
     }
     // A direct hit on a part wins; the enlarged tap areas only help when the finger just misses.
-    const solidPart=solid&&partOf(solid.object);
-    return solidPart??near?.part??glassPart;
+    const mesh=(solid&&partOf(solid.object)?solid.object:null)??near?.mesh??glass;
+    return mesh?{part:partOf(mesh),mesh}:null;
+  }
+
+  // Large parts are already in full view, so they only get a highlight; smaller parts get a close-up.
+  const LARGE_PARTS=['Upper Water Tank','Lower Water Tank & Water Pump','Drainage Tank'];
+  const FOCUS_MIN_DISTANCE=.8, DEFAULT_MIN_DISTANCE=controls.minDistance;
+  // Each control valve is focused on its own: meshes that touch each other form one valve.
+  const valveOf=new Map();
+  {
+    const meshes=[];partGroups['Control Valve'].traverse(object=>{if(object.isMesh)meshes.push(object);});
+    const boxes=meshes.map(object=>new THREE.Box3().setFromObject(object).expandByScalar(.03)),seen=new Set();
+    for(let i=0;i<meshes.length;i++){
+      if(seen.has(i))continue;
+      const valve=[],queue=[i];seen.add(i);
+      while(queue.length){const j=queue.pop();valve.push(meshes[j]);for(let k=0;k<meshes.length;k++)if(!seen.has(k)&&boxes[j].intersectsBox(boxes[k])){seen.add(k);queue.push(k);}}
+      for(const object of valve)valveOf.set(object,valve);
+    }
   }
 
   const infoCard=document.querySelector('#part-info'),infoLabel=document.querySelector('#part-info-label'),infoPurpose=document.querySelector('#part-info-purpose');
-  const outlines=[];
-  function clearOutline(){for(const outline of outlines){outline.removeFromParent();outline.geometry.dispose();outline.material.dispose();}outlines.length=0;}
-  // A temporary outline only; materials are never touched.
-  function outlinePart(name){
-    clearOutline();
+  // Temporary highlight overlays share each mesh's geometry; the original materials are never touched.
+  const HIGHLIGHT_COLOR='#ff9f0a', MIN_GLOW_THICKNESS=.07;
+  const selectionHighlight=[],hoverHighlight=[];
+  function clearHighlight(list){for(const overlay of list){overlay.removeFromParent();if(overlay.isLineSegments)overlay.geometry.dispose();overlay.material.dispose();}list.length=0;}
+  function highlightPart(name,list,strong){
+    clearHighlight(list);
     partGroups[name].traverse(object=>{
-      if(!object.isMesh)return;
-      const outline=new THREE.LineSegments(new THREE.EdgesGeometry(object.geometry,30),new THREE.LineBasicMaterial({color:'#b69245',transparent:true,opacity:.8}));
-      outline.userData.isHighlight=true;outline.raycast=()=>{};object.add(outline);outlines.push(outline);
+      if(!object.isMesh||object.userData.isHighlight)return;
+      // Strong highlights draw on top of glass and frame so thin parts like the dye pipe stay visible.
+      const glow=new THREE.Mesh(object.geometry,new THREE.MeshBasicMaterial({color:HIGHLIGHT_COLOR,transparent:true,opacity:strong?.45:.14,depthTest:!strong,depthWrite:false,side:THREE.DoubleSide}));
+      if(strong){
+        // Thicken very thin parts around their own center so the glow reads on a phone screen.
+        object.geometry.computeBoundingBox();
+        const box=object.geometry.boundingBox,size=box.getSize(new THREE.Vector3()),middle=box.getCenter(new THREE.Vector3());
+        glow.scale.set(...size.toArray().map(value=>value>0&&value<MIN_GLOW_THICKNESS?MIN_GLOW_THICKNESS/value:1));
+        glow.position.copy(middle).sub(middle.clone().multiply(glow.scale));
+        glow.userData.pulse=true;
+      }
+      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(object.geometry,30),new THREE.LineBasicMaterial({color:HIGHLIGHT_COLOR,transparent:true,opacity:strong?1:.6,depthTest:!strong,depthWrite:false}));
+      for(const overlay of [glow,edges]){overlay.userData.isHighlight=true;overlay.raycast=()=>{};overlay.renderOrder=strong?1000:10;overlay.castShadow=overlay.receiveShadow=false;object.add(overlay);list.push(overlay);}
     });
   }
   function panelHeight(){return infoCard.offsetHeight+parseFloat(getComputedStyle(infoCard).bottom)+12;}
@@ -171,22 +201,35 @@ try {
     camera.position.lerpVectors(move.fromPosition,move.position,eased);controls.target.lerpVectors(move.fromTarget,move.target,eased);camera.lookAt(controls.target);
     if(progress===1){move=null;controls.enabled=true;controls.update();}
   }
+  let focusMeshes=null;
   function focusPart(name,instant=false){
-    const box=new THREE.Box3().setFromObject(partGroups[name]),target=box.getCenter(new THREE.Vector3());
+    if(LARGE_PARTS.includes(name)){
+      // Keep the whole apparatus in view above the panel; no zoom.
+      controls.minDistance=DEFAULT_MIN_DISTANCE;
+      moveCamera(homeView(panelHeight()),instant);return;
+    }
+    const box=new THREE.Box3();
+    for(const object of focusMeshes)object.traverse(child=>{if((child.isMesh||child.isLineSegments)&&!child.userData.isHighlight){child.geometry.computeBoundingBox();box.union(child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld));}});
+    const target=box.getCenter(new THREE.Vector3());
     const direction=camera.position.clone().sub(controls.target).normalize(),offset=panelHeight();
-    const distance=THREE.MathUtils.clamp(distanceToFit(box,target,direction,FOCUS_FILL,offset),controls.minDistance,controls.maxDistance);
+    const distance=THREE.MathUtils.clamp(distanceToFit(box,target,direction,FOCUS_FILL,offset),FOCUS_MIN_DISTANCE,controls.maxDistance);
+    // Let the user stay this close while orbiting the part.
+    controls.minDistance=Math.min(DEFAULT_MIN_DISTANCE,distance);
     moveCamera({target,position:target.clone().addScaledVector(direction,distance),offset},instant);
   }
-  function selectPart(name){
+  function selectPart(name,mesh){
     selectedPart=name;
+    focusMeshes=name==='Control Valve'&&valveOf.has(mesh)?valveOf.get(mesh):[partGroups[name]];
     infoLabel.textContent=name;infoPurpose.textContent=partInfo[name];
     infoCard.setAttribute('aria-hidden','false');infoCard.classList.add('is-visible');
-    outlinePart(name);focusPart(name);
+    clearHighlight(hoverHighlight);hoverPart=null;
+    highlightPart(name,selectionHighlight,!LARGE_PARTS.includes(name));focusPart(name);
   }
   function clearSelection(){
     if(!selectedPart)return;
-    selectedPart=null;clearOutline();
+    selectedPart=null;focusMeshes=null;clearHighlight(selectionHighlight);
     infoCard.classList.remove('is-visible');infoCard.setAttribute('aria-hidden','true');
+    controls.minDistance=DEFAULT_MIN_DISTANCE;
     moveCamera(homeView());
   }
   document.querySelector('#part-info-close').addEventListener('click',clearSelection);
@@ -195,26 +238,36 @@ try {
     activePointers.add(event.pointerId);
     tapStart=activePointers.size===1&&event.isPrimary&&event.button===0&&event.target===renderer.domElement?{id:event.pointerId,x:event.clientX,y:event.clientY,moved:false}:null;
   });
-  let hoverFrame=0;
+  // Desktop hover: a light highlight on the part under the pointer.
+  let hoverFrame=0,hoverPart=null;
+  function setHover(name){
+    if(name===selectedPart)name=null;
+    if(name===hoverPart)return;
+    hoverPart=name;clearHighlight(hoverHighlight);if(name)highlightPart(name,hoverHighlight,false);
+  }
   viewport.addEventListener('pointermove',event=>{
     if(tapStart&&event.pointerId===tapStart.id&&Math.hypot(event.clientX-tapStart.x,event.clientY-tapStart.y)>=TAP_MOVE_THRESHOLD)tapStart.moved=true;
     if(event.pointerType==='touch'||hoverFrame||event.target!==renderer.domElement)return;
-    hoverFrame=requestAnimationFrame(()=>{hoverFrame=0;renderer.domElement.style.cursor=partAtPointer(event)?'pointer':'';});
+    hoverFrame=requestAnimationFrame(()=>{hoverFrame=0;const hit=move||event.buttons?null:partAtPointer(event);renderer.domElement.style.cursor=hit?'pointer':'';setHover(hit?.part??null);});
   });
   viewport.addEventListener('pointerup',event=>{
     activePointers.delete(event.pointerId);
     const tap=tapStart;tapStart=null;
     if(!tap||tap.id!==event.pointerId||tap.moved||Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>=TAP_MOVE_THRESHOLD)return;
-    const name=partAtPointer(event);
-    if(name)selectPart(name);else clearSelection();
+    const hit=partAtPointer(event);
+    if(hit)selectPart(hit.part,hit.mesh);else clearSelection();
   });
   viewport.addEventListener('pointercancel',event=>{activePointers.delete(event.pointerId);tapStart=null;});
-  viewport.addEventListener('pointerleave',()=>{renderer.domElement.style.cursor='';});
+  viewport.addEventListener('pointerleave',()=>{renderer.domElement.style.cursor='';setHover(null);});
+  function pulseHighlight(now){
+    const opacity=.32+.22*(.5+.5*Math.sin(now/260));
+    for(const overlay of selectionHighlight)if(overlay.userData.pulse)overlay.material.opacity=opacity;
+  }
   // Development-only hook for the automated interaction check; stripped from production builds.
-  if(import.meta.env.DEV)window.__viewer={camera,controls,model,partGroups,pick:(clientX,clientY)=>partAtPointer({clientX,clientY}),isMoving:()=>!!move};
+  if(import.meta.env.DEV)window.__viewer={camera,controls,model,partGroups,valveOf,pick:(clientX,clientY)=>partAtPointer({clientX,clientY})?.part??null,pickMesh:(clientX,clientY)=>partAtPointer({clientX,clientY})?.mesh??null,isMoving:()=>!!move,focusTarget:()=>controls.target.clone()};
   // ---- end PDF part selection ----
   let last=performance.now();
-  renderer.setAnimationLoop(now=>{const delta=Math.min((now-last)/1000,.05);last=now;if(document.hidden)return;updateMove(delta);if(controls.enabled)controls.update(delta);renderer.render(scene,camera);});
+  renderer.setAnimationLoop(now=>{const delta=Math.min((now-last)/1000,.05);last=now;if(document.hidden)return;updateMove(delta);pulseHighlight(now);if(controls.enabled)controls.update(delta);renderer.render(scene,camera);});
   loading.hidden=true;loading.style.display='none';
   renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();loading.textContent='The 3D view was interrupted. Refresh to reload.';loading.style.display='grid';});
 } catch(error) {

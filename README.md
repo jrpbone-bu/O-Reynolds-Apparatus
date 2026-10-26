@@ -29,7 +29,7 @@ Dimensions, materials, and obscured surfaces are approximated from one photo.
 This is a visual study, not a dimensionally validated engineering model.
 
 The model is grouped by the parts named in the Reynolds Apparatus document
-(Dye Injection Site, Pipe for Dye, Upper Water Tank, Control Valves, Flow
+(Dye Injection Site, Pipe for Dye, Upper Water Tank, Control Valve, Flow
 Visualization Pipe Section, Flow Meter, Lower Water Tank & Water Pump, Drainage
 Tank). Tap or click a part to focus the camera on it and show its description in
 the panel at the bottom of the screen; tap empty space to return.

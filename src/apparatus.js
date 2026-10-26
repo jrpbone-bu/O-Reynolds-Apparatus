@@ -193,7 +193,7 @@ export function createApparatus() {
   const needleCollar=mesh(chamber,'Needle to thin pipe joint collar',new THREE.LatheGeometry([new THREE.Vector2(.009,-.005),new THREE.Vector2(.028,-.005),new THREE.Vector2(.028,.005),new THREE.Vector2(.009,.005),new THREE.Vector2(.009,-.005)],24),m.tube,[cx,sleeveTop-.02,0]);
   // Regroup every rendered object by the parts named in the Reynolds Apparatus document.
   // attach() keeps each world transform, so the assembly looks exactly as before.
-  const PARTS=['Dye Injection Site','Pipe for Dye','Upper Water Tank','Control Valves','Flow Visualization Pipe Section','Flow Meter','Lower Water Tank & Water Pump','Drainage Tank'];
+  const PARTS=['Dye Injection Site','Pipe for Dye','Upper Water Tank','Control Valve','Flow Visualization Pipe Section','Flow Meter','Lower Water Tank & Water Pump','Drainage Tank'];
   const OTHER={frame:'Not in PDF: Frame',piping:'Not in PDF: Piping'};
   const dyePipeNames=['Thin central pipe through holder and divider','Needle to thin pipe joint collar','Concealed downward needle','White hollow needle sleeve outer','White hollow needle sleeve inner','Open annular sleeve rim'];
   const valveNames=['Valve body','Rear-facing valve spindle','Rear upright butterfly control','Vertical brass handwheel valve','Handwheel spindle facing left','Left-facing red handwheel','Handwheel spoke','Additional handwheel spoke','Red handwheel center hub','Handwheel center bolt'];
@@ -202,7 +202,7 @@ export function createApparatus() {
     if(source===frame||object.name==='White lower tray platform')return OTHER.frame;
     if(source===collection)return 'Drainage Tank';
     if(source===reservoir||source===pump)return 'Lower Water Tank & Water Pump';
-    if(valveNames.includes(object.name))return 'Control Valves';
+    if(valveNames.includes(object.name))return 'Control Valve';
     if(source===plumbing)return OTHER.piping;
     if(source===meter)return visualizationNames.includes(object.name)?'Flow Visualization Pipe Section':'Flow Meter';
     if(dyePipeNames.includes(object.name))return 'Pipe for Dye';
