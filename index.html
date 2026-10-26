@@ -4,33 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f3f4f1" />
-    <title>Apparatus — 3D study</title>
+    <title>Apparatus</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <header><a class="brand" href="/" aria-label="Apparatus home"><span class="brand-icon">a.</span> APPARATUS <span class="studio">/ model studio</span></a><span class="status"><i></i> INTERACTIVE 3D</span></header>
-    <main>
-      <aside class="intro">
-        <div class="eyebrow">REFERENCE STUDY <span>001</span></div>
-        <h1>A closer<br> look.</h1>
-        <p class="subtitle">Explore the apparatus.<br> Every angle, in your hands.</p>
-        <div class="divider"></div>
-        <div class="section-label">THE MODEL</div>
-        <p class="model-copy">The approved Top Glass Tank assembly, fitted inside the existing guardrails with all four side ports connected.</p>
-        <ul class="materials"><li><i class="blue"></i>Continuous black support frame</li><li><i class="silver"></i>Blue manifold & rear valve controls</li><li><i class="glass"></i>Glass chamber & central needle tube</li><li><i class="red"></i>Two tanks & base-mounted pump</li></ul>
-        <button id="reference-open" class="reference-card"><img src="/top-glass-tank.png" alt="Original apparatus reference photograph"/><span>Top Glass Tank reference<small>Compare with the model ↗</small></span></button>
-        <p class="note">Approximate proportions · base about two floor tiles long.</p>
-      </aside>
-      <section id="viewport" aria-label="Interactive 3D apparatus viewer">
-        <div class="viewport-top"><span>ASSEMBLY / 01</span><span id="view-label">PERSPECTIVE VIEW</span></div>
-        <div id="loading">Preparing your apparatus…</div>
-        <div class="orientation" aria-hidden="true"><span>Y</span><svg width="42" height="36" viewBox="0 0 42 36"><path d="M21 25V2" stroke="#4f7b66"/><path d="M21 25L40 34" stroke="#ab6255"/><path d="M21 25L3 33" stroke="#527bad"/><circle cx="21" cy="25" r="3" fill="#59636b"/></svg><small>Z &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; X</small></div>
-        <div class="controls" aria-label="Model controls"><button id="reset" title="Reset camera">↺ <span>Reset view</span></button><div class="control-rule"></div><button id="rotate" aria-pressed="false" title="Automatically rotate model">⟳ <span>Auto-rotate</span></button><div class="control-rule"></div><button id="front" title="View apparatus from the front">⊡ <span>Front</span></button><div class="control-rule"></div><button id="zoom-in" aria-label="Zoom in">＋</button><button id="zoom-out" aria-label="Zoom out">−</button></div>
-        <div class="gesture-hint"><span>DRAG TO ROTATE</span><b>·</b><span>SCROLL / PINCH TO ZOOM</span></div>
+    <main id="viewport" aria-label="Interactive 3D apparatus viewer">
+      <section id="part-info" aria-label="Selected part" aria-hidden="true">
+        <button id="part-info-close" aria-label="Close part information">×</button>
+        <strong id="part-info-label"></strong>
+        <p id="part-info-purpose"></p>
       </section>
+      <div id="loading" role="status" aria-label="Loading apparatus">
+        <img src="/apparatus-loading.svg" alt="" width="360" height="507" fetchpriority="high" />
+      </div>
     </main>
-    <footer><span>BUILT TO BE EXPLORED.</span><span>3D MODEL STUDY <b>/</b> TOP GLASS TANK</span></footer>
-    <dialog id="reference-dialog"><div class="dialog-top"><span>Top Glass Tank reference</span><button id="reference-close" aria-label="Close reference">✕</button></div><img src="/top-glass-tank.png" alt="Full original photograph used to model the apparatus"/><p>Model dimensions and unseen surfaces are approximations.</p></dialog>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
-

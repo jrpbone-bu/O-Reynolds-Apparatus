@@ -6,6 +6,7 @@ export function createApparatus() {
   model.name = 'Top Glass Tank — approved experimental assembly';
   const standard=(color,metalness=0,roughness=.4)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
   const m={black:standard('#20262b',.55),blue:standard('#0874e5',.15,.25),steel:standard('#bcc9cd',.75),white:standard('#efece0'),brass:standard('#bd8d35',.6),red:standard('#d33025'),orange:standard('#f16b16'),green:standard('#127845'),bead:standard('#e2e7df'),screen:standard('#0962b4'),edge:standard('#40acb9',.2)};
+  const platformWhite=standard('#e5c99e',0,.4);
   m.glass=new THREE.MeshBasicMaterial({color:'#8cdee8',transparent:true,opacity:.10,side:THREE.DoubleSide,depthWrite:false});
   m.tube=new THREE.MeshStandardMaterial({color:'#dceef0',transparent:true,opacity:.65,roughness:.22});
   m.water=new THREE.MeshBasicMaterial({color:'#58c7de',transparent:true,opacity:.12,side:THREE.DoubleSide,depthWrite:false});
@@ -15,7 +16,7 @@ export function createApparatus() {
   function pipe(g,n,a,b,r=.09,mat=m.blue){const v=new THREE.Vector3(...a),w=new THREE.Vector3(...b),delta=w.clone().sub(v);const o=mesh(g,n,new THREE.CylinderGeometry(r,r,delta.length(),24),mat,v.add(w).multiplyScalar(.5).toArray());o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());return o;}
   function joint(g,x,y,z,r=.12){mesh(g,'Pipe elbow / coupling',new THREE.SphereGeometry(r,20,16),m.blue,[x,y,z]);}
   function panelEdges(g,w,h,d,x,y,z=0){const e=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d)),new THREE.LineBasicMaterial({color:'#2996a7',transparent:true,opacity:.7}));e.position.set(x,y,z);g.add(e);}
-  function tank(g,n,x,y,w,h,d,closed=false,fillToRim=false){box(g,n+' walls',w,h,d,m.glass,x,y);panelEdges(g,w,h,d,x,y);box(g,n+' floor',w,.035,d,m.glass,x,y-h/2);if(closed)box(g,n+' fixed closed cover',w,.055,d,m.white,x,y+h/2);const waterHeight=fillToRim?h-.06:h*.72;box(g,n+' water',w-.05,waterHeight,d-.05,m.water,x,y-h/2+waterHeight/2);if(!fillToRim)panelEdges(g,w-.05,.006,d-.05,x,y+h*.24);}
+  function tank(g,n,x,y,w,h,d,closed=false,fillToRim=false){box(g,n+' walls',w,h,d,m.glass,x,y);panelEdges(g,w,h,d,x,y);box(g,n+' floor',w,.035,d,m.glass,x,y-h/2);if(closed)box(g,n+' fixed closed cover',w,.055,d,platformWhite,x,y+h/2);const waterHeight=fillToRim?h-.06:h*.72;box(g,n+' water',w-.05,waterHeight,d-.05,m.water,x,y-h/2+waterHeight/2);if(!fillToRim)panelEdges(g,w-.05,.006,d-.05,x,y+h*.24);}
   const frame=group('11 — continuous structural frame');
   const L=-3.15,T=-1.15,R=3.15,depth=1.65,rail=.16,base=.14,deck=2.0;
   // Five-inch visual rise on the provisional model scale; physical dimensions remain unmeasured.
@@ -69,12 +70,18 @@ export function createApparatus() {
     const geo=new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false,curveSegments:40});geo.rotateX(-Math.PI/2);
     return mesh(g,name,geo,material,[cx,y,0]);
   }
-  plateWithBore(chamber,'White lower tray platform',T-L-rail,depth-rail,.08,4.25,m.white);
+  plateWithBore(chamber,'White lower tray platform',T-L-rail,depth-rail,.08,4.25,platformWhite);
   plateWithBore(chamber,'Housing underside with open outlet',width,tankDepth,.045,platformTop,m.black);
   for(const x of [cx-width/2+.025,cx+width/2-.025])box(chamber,'Closed black housing side',.05,housingTop-platformTop,tankDepth,m.black,x,(platformTop+housingTop)/2);
   for(const z of [-tankDepth/2+.025,tankDepth/2-.025])box(chamber,'Closed black housing end',width-.10,housingTop-platformTop,.05,m.black,cx,(platformTop+housingTop)/2,z);
+  const upperPillars=[];
   for(const x of [cx-width/2+post/2,cx+width/2-post/2])for(const z of [-tankDepth/2+post/2,tankDepth/2-post/2]){
-    box(artifact,'Flush corner pillar',post,topPlateBottom-housingTop,post,m.black,x,(housingTop+topPlateBottom)/2,z);
+    const pillar=box(artifact,'Flush corner pillar',post,topPlateBottom-housingTop,post,m.black,x,(housingTop+topPlateBottom)/2,z);
+    const upper=pillar.clone();upper.name='Upper support pillar';
+    const upperPillarBottom=dividerY+.035+.005; // Clear the entire glass thickness plus a small visible gap.
+    upper.geometry=new THREE.BoxGeometry(post,topPlateBottom-upperPillarBottom,post);upper.geometry.translate(0,(upperPillarBottom-housingTop)/2,0);
+    pillar.geometry.dispose();pillar.geometry=new THREE.BoxGeometry(post,dividerY-housingTop,post);pillar.geometry.translate(0,(dividerY-topPlateBottom)/2,0);
+    artifact.add(upper);upperPillars.push(upper);
   }
   // Four clear wall panels; the right wall has four actual coaxial pipe penetrations.
   const glassBottom=housingTop, glassHeight=dividerY-glassBottom, glassCenter=(dividerY+glassBottom)/2;
@@ -88,19 +95,19 @@ export function createApparatus() {
   plateWithBore(cap,'Horizontal glass divider',width,tankDepth,.035,dividerY,m.glass,.033);
   panelEdges(cap,width,.035,tankDepth,cx,dividerY+.0175);
   plateWithBore(cap,'Black top support',width,tankDepth,.13,topPlateBottom,m.black,.035);
-  plateWithBore(cap,'White top holder base',width,tankDepth,.03,holderBase-.03,m.white,.035);
+  plateWithBore(cap,'White top holder base',width,tankDepth,.03,holderBase-.03,platformWhite,.035);
   for(const x of [cx-.66,cx+.66])box(cap,'02 upper glass holder side wall',.012,.65,1.2,m.glass,x,holderBase+.325);
   for(const z of [-.60,.60])box(cap,'02 upper glass holder end wall',1.308,.65,.012,m.glass,cx,holderBase+.325,z);
   panelEdges(cap,1.32,.65,1.2,cx,holderBase+.325);
   const sleeveBottom=4.12, sleeveTop=housingTop-.08, outer=.095, inner=.065;
-  pipe(artifact,'Thin central pipe through holder and divider',[cx,sleeveTop-.02,0],[cx,holderBase+.04,0],.025,m.tube);
+  const thinPipe=pipe(artifact,'Thin central pipe through holder and divider',[cx,sleeveTop-.02,0],[cx,holderBase+.04,0],.025,m.tube);
   // Open white sleeve: outer/inner surfaces and annular rims, no solid end caps.
   // Recess the open sleeve beneath the solid cover, inside the hollow housing.
   mesh(chamber,'White hollow needle sleeve outer',new THREE.CylinderGeometry(outer,outer,sleeveTop-sleeveBottom,40,1,true),m.white,[cx,(sleeveTop+sleeveBottom)/2,0]);
   const innerMat=m.white.clone();innerMat.side=THREE.BackSide;
   mesh(chamber,'White hollow needle sleeve inner',new THREE.CylinderGeometry(inner,inner,sleeveTop-sleeveBottom,40,1,true),innerMat,[cx,(sleeveTop+sleeveBottom)/2,0]);
   for(const y of [sleeveBottom,sleeveTop]){const rim=mesh(chamber,'Open annular sleeve rim',new THREE.RingGeometry(inner,outer,40),m.white,[cx,y,0]);rim.rotation.x=y===sleeveTop?-Math.PI/2:Math.PI/2;}
-  const needle=pipe(chamber,'Concealed downward needle',[cx,sleeveTop-.04,0],[cx,sleeveTop-.22,0],.008,m.steel);needle.userData.hiddenInsideCylinder=true;
+  const needle=pipe(chamber,'Concealed downward needle',[cx,sleeveTop-.011,0],[cx,sleeveTop-.22,0],.008,m.steel);needle.userData.hiddenInsideCylinder=true;
   const plumbing=group('05 + 06 — blue header and rear valve controls');
   const headerX=1.35, portZ=0;
   portYs.forEach((y,i)=>{
@@ -183,6 +190,20 @@ export function createApparatus() {
   pipe(valveFacing,'Handwheel center bolt',[-.411,2.78,0],[-.406,2.78,0],.022,galvanized);
   for(const t of [Math.PI/6,Math.PI/6+Math.PI])pipe(valveFacing,'Additional handwheel spoke',[-.38,2.78,0],[-.38,2.78+Math.cos(t)*.15,Math.sin(t)*.15],.018,m.red);
   meter.rotation.y=Math.atan2(.24,.975)-Math.PI/2;
+  const topGroup=new THREE.Group();topGroup.name='topGroup';topGroup.position.set(cx,dividerY,0);artifact.add(topGroup);
+  model.updateMatrixWorld(true);
+  topGroup.attach(cap);
+  for(const pillar of upperPillars)topGroup.attach(pillar);
+  topGroup.attach(thinPipe);
+  topGroup.attach(needle);
+  const needleCollar=mesh(chamber,'Needle to thin pipe joint collar',new THREE.LatheGeometry([new THREE.Vector2(.009,-.005),new THREE.Vector2(.028,-.005),new THREE.Vector2(.028,.005),new THREE.Vector2(.009,.005),new THREE.Vector2(.009,-.005)],24),m.tube,[cx,sleeveTop-.02,0]);
+  topGroup.attach(needleCollar);
+  const chamberGroup=new THREE.Group();chamberGroup.name='chamberGroup';chamberGroup.position.set(cx,platformTop,0);chamberGroup.userData.partId='chamber';artifact.add(chamberGroup);
+  model.updateMatrixWorld(true);
+  const chamberParts=[];
+  model.traverse(object=>{if(['Left glass wall','Front / rear glass wall','Right glass wall with four port openings','Flush corner pillar','Housing underside with open outlet','Closed black housing side','Closed black housing end'].includes(object.name))chamberParts.push(object);});
+  for(const object of chamberParts)chamberGroup.attach(object);
+  if(typeof window!=='undefined'){window.topGroup=topGroup;window.chamberGroup=chamberGroup;}
   model.userData={revision:'Top Glass Tank',units:'relative; dimensions unmeasured',reference:'Revision K plus construction photographs'};
   return model;
 }
