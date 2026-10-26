@@ -197,18 +197,21 @@ export function createApparatus() {
   const OTHER={frame:'Not in PDF: Frame',piping:'Not in PDF: Piping'};
   const dyePipeNames=['Thin central pipe through holder and divider','Needle to thin pipe joint collar','Concealed downward needle','White hollow needle sleeve outer','White hollow needle sleeve inner','Open annular sleeve rim'];
   const valveNames=['Valve body','Rear-facing valve spindle','Rear upright butterfly control','Vertical brass handwheel valve','Handwheel spindle facing left','Left-facing red handwheel','Handwheel spoke','Additional handwheel spoke','Red handwheel center hub','Handwheel center bolt'];
-  const visualizationNames=['Visible upper outlet pipe','Lower visible pipe to sealed collection cover'];
+  const meterBodyNames=['Inline digital flow meter','Blue meter display','LCD','Glossy recessed LCD cover','K24 reset button','K24 power button','Button icon ring','Power icon stroke'];
   function partFor(object,source){
     if(source===frame||object.name==='White lower tray platform')return OTHER.frame;
     if(source===collection)return 'Drainage Tank';
     if(source===reservoir||source===pump)return 'Lower Water Tank & Water Pump';
     if(valveNames.includes(object.name))return 'Control Valve';
     if(source===plumbing)return OTHER.piping;
-    if(source===meter)return visualizationNames.includes(object.name)?'Flow Visualization Pipe Section':'Flow Meter';
+    // The flow meter is the white box and what is mounted on it; its pipe fittings belong to the visualization line.
+    if(source===meter)return meterBodyNames.includes(object.name)?'Flow Meter':'Flow Visualization Pipe Section';
     if(dyePipeNames.includes(object.name))return 'Pipe for Dye';
     // The glass divider and its edge lines are the lid of the upper water tank.
     if(object.name==='Horizontal glass divider'||(object.isLineSegments&&Math.abs(object.position.y-(dividerY+.0175))<1e-6))return 'Upper Water Tank';
-    if(object.parent===cap||object.name==='Upper support pillar')return 'Dye Injection Site';
+    // Only the glass vessel on top is the dye injection site; its supporting plates and pillars are frame.
+    if(object.parent===cap&&(object.name.startsWith('02 upper glass holder')||object.isLineSegments))return 'Dye Injection Site';
+    if(object.parent===cap||object.name==='Upper support pillar')return OTHER.frame;
     return 'Upper Water Tank';
   }
   model.updateMatrixWorld(true);

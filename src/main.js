@@ -143,22 +143,18 @@ try {
   // Large parts are already in full view, so they only get a highlight; smaller parts get a close-up.
   const LARGE_PARTS=['Upper Water Tank','Lower Water Tank & Water Pump','Drainage Tank'];
   const FOCUS_MIN_DISTANCE=.8, DEFAULT_MIN_DISTANCE=controls.minDistance;
-  // Each control valve is focused on its own: meshes that touch each other form one valve.
-  const valveOf=new Map();
-  {
-    const meshes=[];partGroups['Control Valve'].traverse(object=>{if(object.isMesh)meshes.push(object);});
-    const boxes=meshes.map(object=>new THREE.Box3().setFromObject(object).expandByScalar(.03)),seen=new Set();
-    for(let i=0;i<meshes.length;i++){
-      if(seen.has(i))continue;
-      const valve=[],queue=[i];seen.add(i);
-      while(queue.length){const j=queue.pop();valve.push(meshes[j]);for(let k=0;k<meshes.length;k++)if(!seen.has(k)&&boxes[j].intersectsBox(boxes[k])){seen.add(k);queue.push(k);}}
-      for(const object of valve)valveOf.set(object,valve);
-    }
-  }
+  // The handwheel valve beside the flow meter is focused from the current view. The two rear valves on the
+  // blue pipes are focused together from behind the apparatus, where their twist handles face.
+  const REAR_VALVE_NAMES=['Valve body','Rear-facing valve spindle','Rear upright butterfly control'];
+  const REAR_VIEW_DIRECTION=new THREE.Vector3(.38,.22,-.9).normalize();
+  const valveOf=new Map(),frontValve=[],rearValves=[];
+  partGroups['Control Valve'].traverse(object=>{if(object.isMesh)(REAR_VALVE_NAMES.includes(object.name)?rearValves:frontValve).push(object);});
+  for(const object of frontValve)valveOf.set(object,frontValve);
+  for(const object of rearValves)valveOf.set(object,rearValves);
 
   const infoCard=document.querySelector('#part-info'),infoLabel=document.querySelector('#part-info-label'),infoPurpose=document.querySelector('#part-info-purpose');
   // Temporary highlight overlays share each mesh's geometry; the original materials are never touched.
-  const HIGHLIGHT_COLOR='#ff9f0a', MIN_GLOW_THICKNESS=.07;
+  const HIGHLIGHT_COLOR='#f5a623', MIN_GLOW_THICKNESS=.07;
   const selectionHighlight=[],hoverHighlight=[];
   function clearHighlight(list){for(const overlay of list){overlay.removeFromParent();if(overlay.isLineSegments)overlay.geometry.dispose();overlay.material.dispose();}list.length=0;}
   function highlightPart(name,list,strong){
@@ -166,7 +162,7 @@ try {
     partGroups[name].traverse(object=>{
       if(!object.isMesh||object.userData.isHighlight)return;
       // Strong highlights draw on top of glass and frame so thin parts like the dye pipe stay visible.
-      const glow=new THREE.Mesh(object.geometry,new THREE.MeshBasicMaterial({color:HIGHLIGHT_COLOR,transparent:true,opacity:strong?.45:.14,depthTest:!strong,depthWrite:false,side:THREE.DoubleSide}));
+      const glow=new THREE.Mesh(object.geometry,new THREE.MeshBasicMaterial({color:HIGHLIGHT_COLOR,transparent:true,opacity:strong?.2:.1,depthTest:!strong,depthWrite:false,side:THREE.DoubleSide}));
       if(strong){
         // Thicken very thin parts around their own center so the glow reads on a phone screen.
         object.geometry.computeBoundingBox();
@@ -175,7 +171,7 @@ try {
         glow.position.copy(middle).sub(middle.clone().multiply(glow.scale));
         glow.userData.pulse=true;
       }
-      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(object.geometry,30),new THREE.LineBasicMaterial({color:HIGHLIGHT_COLOR,transparent:true,opacity:strong?1:.6,depthTest:!strong,depthWrite:false}));
+      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(object.geometry,30),new THREE.LineBasicMaterial({color:HIGHLIGHT_COLOR,transparent:true,opacity:strong?.75:.45,depthTest:!strong,depthWrite:false}));
       for(const overlay of [glow,edges]){overlay.userData.isHighlight=true;overlay.raycast=()=>{};overlay.renderOrder=strong?1000:10;overlay.castShadow=overlay.receiveShadow=false;object.add(overlay);list.push(overlay);}
     });
   }
@@ -211,7 +207,7 @@ try {
     const box=new THREE.Box3();
     for(const object of focusMeshes)object.traverse(child=>{if((child.isMesh||child.isLineSegments)&&!child.userData.isHighlight){child.geometry.computeBoundingBox();box.union(child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld));}});
     const target=box.getCenter(new THREE.Vector3());
-    const direction=camera.position.clone().sub(controls.target).normalize(),offset=panelHeight();
+    const direction=focusMeshes===rearValves?REAR_VIEW_DIRECTION.clone():camera.position.clone().sub(controls.target).normalize(),offset=panelHeight();
     const distance=THREE.MathUtils.clamp(distanceToFit(box,target,direction,FOCUS_FILL,offset),FOCUS_MIN_DISTANCE,controls.maxDistance);
     // Let the user stay this close while orbiting the part.
     controls.minDistance=Math.min(DEFAULT_MIN_DISTANCE,distance);
@@ -260,7 +256,7 @@ try {
   viewport.addEventListener('pointercancel',event=>{activePointers.delete(event.pointerId);tapStart=null;});
   viewport.addEventListener('pointerleave',()=>{renderer.domElement.style.cursor='';setHover(null);});
   function pulseHighlight(now){
-    const opacity=.32+.22*(.5+.5*Math.sin(now/260));
+    const opacity=.13+.11*(.5+.5*Math.sin(now/260));
     for(const overlay of selectionHighlight)if(overlay.userData.pulse)overlay.material.opacity=opacity;
   }
   // Development-only hook for the automated interaction check; stripped from production builds.
