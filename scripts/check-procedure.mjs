@@ -63,8 +63,8 @@ async function partPoint(page,name){
     throw Error('No tappable '+name);
   },name);
 }
-const baselineMain=execFileSync('git',['show','29dd4e8:src/main.js'],{encoding:'utf8'});
-const noteSource=execFileSync('git',['show','29dd4e8:src/procedure.js'],{encoding:'utf8'});
+const baselineMain=execFileSync('git',['show','9417748:src/main.js'],{encoding:'utf8'});
+const noteSource=execFileSync('git',['show','9417748:src/procedure.js'],{encoding:'utf8'});
 async function enableNote(page){
   await page.route('**/src/procedure.js*',route=>route.fulfill({
     contentType:'text/javascript',body:noteSource.replace('SHOW_REYNOLDS_NOTE=false','SHOW_REYNOLDS_NOTE=true')
@@ -167,9 +167,9 @@ try{
   for(const note of [false,true]){
     const baseline=await captureHtml(true,note);
     assert.equal(baseline.steps[7].includes('<details>'),note,'baseline note override');
-    assert.deepEqual(await captureHtml(false,note),baseline,'HTML differs from commit 29dd4e8');
+    assert.deepEqual(await captureHtml(false,note),baseline,'HTML differs from commit 9417748');
   }
-  console.log('HTML: PASS — 11 step panels, 11 sheets and completion identical to 29dd4e8, note off and on');
+  console.log('HTML: PASS — 11 step panels, 11 sheets and completion identical to 9417748, note off and on');
   for(const [label,width,height,touch] of [['phone',390,844,true],['small-phone',360,640,true],['desktop',1440,900,false]]){
     const context=await browser.newContext({viewport:{width,height},isMobile:touch,hasTouch:touch,deviceScaleFactor:1});
     const page=await context.newPage(),errors=[];
