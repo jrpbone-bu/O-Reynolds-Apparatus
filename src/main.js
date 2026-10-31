@@ -3,12 +3,12 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createApparatus } from './apparatus.js';
+import { addBlueprintBackground } from './background.js';
 
 const viewport=document.querySelector('#viewport');
 const loading=document.querySelector('#loading');
 try {
   const scene=new THREE.Scene();
-  scene.background=new THREE.Color('#f3f4f1');
   const touchDevice=window.matchMedia('(pointer: coarse)').matches;
   const renderer=new THREE.WebGLRenderer({antialias:!touchDevice,alpha:false,powerPreference:touchDevice?'low-power':'default'});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio,touchDevice?1.5:2));
@@ -46,6 +46,7 @@ try {
   const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
   const ctx=canvas.getContext('2d'),gradient=ctx.createRadialGradient(64,64,4,64,64,64);gradient.addColorStop(0,'rgba(50,66,45,0.22)');gradient.addColorStop(1,'rgba(50,66,45,0)');ctx.fillStyle=gradient;ctx.fillRect(0,0,128,128);
   const contact=new THREE.Mesh(new THREE.PlaneGeometry(5,4),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(canvas),transparent:true,depthWrite:false}));contact.rotation.x=-Math.PI/2;contact.position.y=.002;scene.add(contact);
+  addBlueprintBackground(scene);
   // Fit the actual model bounds to both dimensions, including short landscape screens.
   const bounds=new THREE.Box3().setFromObject(model), center=bounds.getCenter(new THREE.Vector3());
   controls.target.copy(center);

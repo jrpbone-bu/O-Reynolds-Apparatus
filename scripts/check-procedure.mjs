@@ -79,11 +79,15 @@ async function captureHtml(baseline,note=false){
     if(baseline)await page.route('**/src/main.js*',async route=>{
       // Use Vite's resolved dependency URLs, while executing the committed viewer.
       const served=await (await route.fetch()).text();
-      const imports=[...served.matchAll(/\bimport [^\r\n]*? from ['"]([^'"]+)['"]/g)].map(match=>match[1]);
-      assert.equal(imports.length,5,'Vite dependency URLs');
+      const imports=new Map([...served.matchAll(/\b(import [^\r\n]*? from )['"]([^'"]+)['"]/g)]
+        .map(match=>[match[1],match[2]]));
       let index=0;
       const body=baselineMain.replace(/^(import .*? from )['"][^'"]+['"]/gm,
-        (_,prefix)=>prefix+JSON.stringify(imports[index++]));
+        (_,prefix)=>{
+          assert.ok(imports.has(prefix),'Vite dependency URL for '+prefix);
+          index++;
+          return prefix+JSON.stringify(imports.get(prefix));
+        });
       assert.equal(index,5,'baseline import resolution');
       await route.fulfill({contentType:'text/javascript',body:body.replace('import.meta.env.DEV','true')});
     });
