@@ -1,12 +1,15 @@
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
 import procedure, {SHOW_REYNOLDS_NOTE} from '../src/procedure.js';
 const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 await mkdir('artifacts/procedure',{recursive:true});
 async function settle(page){
   await page.waitForTimeout(100);
   await page.waitForFunction(()=>window.__viewer&&!__viewer.isMoving());
+  await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+  await page.waitForFunction(()=>!__viewer.isMoving());
 }
 const signature=page=>page.evaluate(()=>{
   const rows=[];
@@ -60,8 +63,113 @@ async function partPoint(page,name){
     throw Error('No tappable '+name);
   },name);
 }
+const baselineMain=execFileSync('git',['show','29dd4e8:src/main.js'],{encoding:'utf8'});
+const noteSource=execFileSync('git',['show','29dd4e8:src/procedure.js'],{encoding:'utf8'});
+async function enableNote(page){
+  await page.route('**/src/procedure.js*',route=>route.fulfill({
+    contentType:'text/javascript',body:noteSource.replace('SHOW_REYNOLDS_NOTE=false','SHOW_REYNOLDS_NOTE=true')
+  }));
+}
+async function captureHtml(baseline,note=false){
+  const context=await browser.newContext({viewport:{width:1440,height:900},reducedMotion:'reduce'});
+  try{
+    const page=await context.newPage();
+    const errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
+    if(baseline)await page.route('**/src/main.js*',async route=>{
+      // Use Vite's resolved dependency URLs, while executing the committed viewer.
+      const served=await (await route.fetch()).text();
+      const imports=[...served.matchAll(/\bimport [^\r\n]*? from ['"]([^'"]+)['"]/g)].map(match=>match[1]);
+      assert.equal(imports.length,5,'Vite dependency URLs');
+      let index=0;
+      const body=baselineMain.replace(/^(import .*? from )['"][^'"]+['"]/gm,
+        (_,prefix)=>prefix+JSON.stringify(imports[index++]));
+      assert.equal(index,5,'baseline import resolution');
+      await route.fulfill({contentType:'text/javascript',body:body.replace('import.meta.env.DEV','true')});
+    });
+    if(note)await enableNote(page);
+    await page.goto(process.env.APP_URL??'http://localhost:5173');
+    try{await page.waitForFunction(()=>!!window.__viewer,null,{timeout:10000});}
+    catch(error){throw new Error(`HTML capture baseline=${baseline}, note=${note}: ${errors.join('; ')}`,{cause:error});}
+    return await page.evaluate(()=>{
+      __viewer.startProcedure(true);const steps=[],sheets=[];
+      for(let i=0;i<11;i++){
+        if(i>0)__viewer.goToStep(i);
+        steps.push(document.querySelector('#procedure-panel').innerHTML);
+        document.querySelector('#step-list').click();
+        sheets.push(document.querySelector('#step-sheet').innerHTML);
+        document.querySelector('#sheet-close').click();
+      }
+      document.querySelector('#step-next').click();
+      return {steps,sheets,completion:document.querySelector('#procedure-panel').innerHTML};
+    });
+  }finally{await context.close();}
+}
+async function view(page){
+  return page.evaluate(()=>{
+    // Drain the existing orbit damping before comparing the final manual view.
+    for(let i=0;i<200;i++)__viewer.controls.update(0);
+    return {
+      direction:__viewer.camera.position.clone().sub(__viewer.controls.target).normalize().toArray(),
+      target:__viewer.controls.target.toArray(),
+      distance:__viewer.camera.position.distanceTo(__viewer.controls.target)
+    };
+  });
+}
+function unchangedView(before,after){
+  const dot=before.direction.reduce((sum,value,i)=>sum+value*after.direction[i],0);
+  assert.ok(Math.acos(Math.min(1,Math.max(-1,dot)))<5*Math.PI/180,'manual direction changed');
+  assert.ok(Math.hypot(...before.target.map((value,i)=>value-after.target[i]))<.001,'manual target changed');
+  assert.ok(Math.abs(before.distance-after.distance)<.001,'manual distance changed');
+}
+async function manualViewCheck(context,width,height){
+  const page=await context.newPage();
+  try{
+    await enableNote(page);await page.emulateMedia({reducedMotion:'reduce'});
+    await page.goto(process.env.APP_URL??'http://localhost:5173');await page.waitForFunction(()=>!!window.__viewer);
+    await page.locator('#procedure-start').click();
+    await page.evaluate(()=>__viewer.goToStep(7));await settle(page);
+    assert.equal(await page.locator('details').count(),1,'test-only Reynolds note enabled');
+    // Let the note actually grow on phones too, rather than hitting the 42dvh cap.
+    await page.locator('#procedure-panel').evaluate(el=>{el.style.maxHeight='80dvh';});await settle(page);
+    const x=width*.45,y=90;
+    await page.mouse.move(x,y);await page.mouse.down();
+    await page.mouse.move(x+65,y+25,{steps:12});await page.mouse.up();
+    await view(page);
+    // Pan too, so an unwanted recenter cannot pass a direction-only assertion.
+    await page.mouse.move(x,y);await page.mouse.down({button:'right'});
+    await page.mouse.move(x+28,y+15,{steps:8});
+    const manual=await view(page);
+    const closedHeight=await page.locator('#procedure-panel').evaluate(el=>el.offsetHeight);
+    await page.locator('details').evaluate(el=>{el.open=true;});await settle(page);
+    assert.notEqual(await page.locator('#procedure-panel').evaluate(el=>el.offsetHeight),closedHeight,'note must resize panel');
+    unchangedView(manual,await view(page));
+    await page.mouse.up({button:'right'});await settle(page);
+    unchangedView(manual,await view(page));
+    await page.locator('details').evaluate(el=>{el.open=false;});await settle(page);
+    unchangedView(manual,await view(page));
+    await page.locator('.chips button').click();await settle(page);
+    assert.ok(await targetError(page,'Flow Meter')<.001,'chip clears manual view');
+    await page.locator('#inline-part button').click();await settle(page);
+    await page.mouse.move(x,y);await page.mouse.down({button:'right'});
+    await page.mouse.move(x+30,y+20,{steps:8});await page.mouse.up({button:'right'});await view(page);
+    assert.ok(await targetError(page,'step')>.001,'pan should move target before window resize');
+    await page.setViewportSize({width:width+1,height});await settle(page);
+    assert.ok(await targetError(page,'step')<.001,'window resize reframes step');
+    await page.mouse.move(x,y);await page.mouse.wheel(0,100);await settle(page);
+    const zoomed=await view(page);
+    await page.locator('details').evaluate(el=>{el.open=true;});await settle(page);
+    unchangedView(zoomed,await view(page));
+  }finally{await page.close();}
+}
 assert.equal(SHOW_REYNOLDS_NOTE,false);
 try{
+  for(const note of [false,true]){
+    const baseline=await captureHtml(true,note);
+    assert.equal(baseline.steps[7].includes('<details>'),note,'baseline note override');
+    assert.deepEqual(await captureHtml(false,note),baseline,'HTML differs from commit 29dd4e8');
+  }
+  console.log('HTML: PASS — 11 step panels, 11 sheets and completion identical to 29dd4e8, note off and on');
   for(const [label,width,height,touch] of [['phone',390,844,true],['small-phone',360,640,true],['desktop',1440,900,false]]){
     const context=await browser.newContext({viewport:{width,height},isMobile:touch,hasTouch:touch,deviceScaleFactor:1});
     const page=await context.newPage(),errors=[];
@@ -78,6 +186,18 @@ try{
     assert.equal(await page.locator('#procedure-start').textContent(),'▶ Start procedure');
     assert.equal(await page.evaluate(()=>localStorage.getItem('reynolds-procedure')),null);
     await activate('#procedure-start');await settle(page);
+    await activate('#step-next');await settle(page);
+    await activate('#step-back');await settle(page);
+    await activate('#step-exit');await settle(page);
+    assert.equal(await page.locator('#procedure-start').textContent(),'▶ Start procedure');
+    await activate('#procedure-start');await activate('#step-next');await settle(page);
+    await activate('#step-exit');await settle(page);
+    assert.equal(await page.locator('#procedure-start').textContent(),'▶ Resume procedure (Step 2)');
+    await activate('#start-over');await settle(page);
+    await activate('#step-list');await activate('[data-step="0"]');await settle(page);
+    await activate('#step-exit');await settle(page);
+    assert.equal(await page.locator('#procedure-start').textContent(),'▶ Resume procedure (Step 1)');
+    await activate('#start-over');await settle(page);
     await page.keyboard.press('Control+l');
     assert.equal(await page.locator('#step-backdrop').isVisible(),false);
     // Exercise real model taps: timeout, replacement, empty-space dismissal and Open.
@@ -166,8 +286,9 @@ try{
       const difference=Math.hypot(...immediate[key].map((value,i)=>value-later[key][i]));
       assert.ok(difference<.001,`reduced-motion ${key} changed by ${difference}`);
     }
+    await manualViewCheck(context,width,height);
     assert.deepEqual(errors,[]);
-    console.log(`${label} ${width}×${height}: PASS — all 11 steps, persistent chip focus, 44px targets, valve subsets, toast, shortcuts, resume, completion, unchanged model`);
+    console.log(`${label} ${width}×${height}: PASS — all 11 steps, persistent chip focus, 44px targets, valve subsets, toast, shortcuts, resume, completion, manual orbit/pan/zoom, unchanged model`);
     await context.close();
   }
 }finally{await browser.close();}

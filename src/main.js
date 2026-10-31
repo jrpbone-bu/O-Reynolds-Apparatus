@@ -82,13 +82,14 @@ try {
   }
   let previousFit=0,selectedPart=null;
   let procedureState=null;
-  let procedureFocus=null, reframeRequest=0, reframePending=false, orbiting=false;
+  let procedureFocus=null, reframeRequest=0, reframePending=null, orbiting=false;
+  let userMoved=false;
   function resize(){
     const zoomRatio=previousFit?camera.position.distanceTo(controls.target)/previousFit:1;
     renderer.setSize(viewport.clientWidth,viewport.clientHeight);
     applyProjection();
     previousFit=fitDistance();controls.maxDistance=Math.max(36,previousFit*2.5);
-    if(procedureState){scheduleProcedureFrame();return;}
+    if(procedureState){scheduleProcedureFrame('window');return;}
     if(selectedPart){focusPart(selectedPart,true);return;}
     const direction=camera.position.clone().sub(controls.target).normalize();
     camera.position.copy(controls.target).addScaledVector(direction,THREE.MathUtils.clamp(previousFit*zoomRatio,controls.minDistance,controls.maxDistance));
@@ -214,7 +215,12 @@ try {
   }
   function frameMeshes(meshes,direction=null,instant=false){
     const box=new THREE.Box3();model.updateMatrixWorld(true);
-    for(const object of meshes)object.traverse(child=>{if((child.isMesh||child.isLineSegments)&&!child.userData.isHighlight){child.geometry.computeBoundingBox();box.union(child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld));}});
+    for(const object of meshes)object.traverse(child=>{
+      if((child.isMesh||child.isLineSegments)&&!child.userData.isHighlight){
+        child.geometry.computeBoundingBox();
+        box.union(child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld));
+      }
+    });
     const target=box.getCenter(new THREE.Vector3()),offset=panelHeight();
     direction=direction?.clone()??camera.position.clone().sub(controls.target).normalize();
     const distance=THREE.MathUtils.clamp(distanceToFit(box,target,direction,FOCUS_FILL,offset),FOCUS_MIN_DISTANCE,controls.maxDistance);
@@ -336,9 +342,12 @@ try {
         if (
           o.isMesh &&
           !o.userData.isHighlight &&
-          /^(Pump motor|Motor cooling fin|Pump volute|Motor terminal housing|Bolted pump foot|Top discharge fitting|Straight green discharge hose|Short green reservoir suction hose|Hose reinforcement|Hose clamp)$/.test(
-            o.name
-          )
+          [
+            'Pump motor', 'Motor cooling fin', 'Pump volute',
+            'Motor terminal housing', 'Bolted pump foot', 'Top discharge fitting',
+            'Straight green discharge hose', 'Short green reservoir suction hose',
+            'Hose reinforcement', 'Hose clamp'
+          ].includes(o.name)
         )
           meshes.push(o);
       });
@@ -363,8 +372,63 @@ try {
         instant
       );
   }
-  function phaseStrip(step, complete = false) {
-    return `<div class="phase-strip">${['A', 'B', 'C'].map((phase, i) => `<div class="${complete || phase < step.phase ? 'past' : phase === step.phase ? 'current' : ''}"><span></span>${phase} · ${['Setup', 'Operation', 'Cleanup'][i]}${complete || phase < step.phase ? ' ✓' : ''}</div>`).join('')}</div>`;
+  function phaseStripHtml(step, complete = false) {
+    const segments = ['A', 'B', 'C'].map((phase, i) => {
+      const past = complete || phase < step.phase;
+      const state = past ? 'past' : phase === step.phase ? 'current' : '';
+      return `<div class="${state}"><span></span>` +
+        `${phase} · ${['Setup', 'Operation', 'Cleanup'][i]}` +
+        `${past ? ' ✓' : ''}</div>`;
+    });
+    return `<div class="phase-strip">${segments.join('')}</div>`;
+  }
+  function metaRowHtml(index) {
+    return `<div class="meta">` +
+      `<button id="step-list">Step ${index + 1} of 11 ⌄</button>` +
+      `<button id="step-exit" aria-label="Exit procedure">×</button></div>`;
+  }
+  function chipsHtml(step) {
+    const chips = step.parts.map((part, i) => {
+      const suffix = part === 'Control Valve' && step.focus === 'rear'
+        ? ' (ball valves)' : '';
+      return `<button data-part="${i}">${part}${suffix}</button>`;
+    });
+    return `<div class="chips">${chips.join('')}</div>`;
+  }
+  function stepBodyHtml(step) {
+    const empty = !step.parts.length
+      ? '<p class="muted">No part to highlight. The whole apparatus is shown.</p>'
+      : '';
+    const note = step.id === 'B4' && SHOW_REYNOLDS_NOTE
+      ? '<details><summary>How to calculate N<sub>RE</sub></summary>' +
+        '<p>N<sub>RE</sub> = ρvD/μ = 4Q/(πDν)</p>' +
+        '<p>Laminar below about 2,000 · transitional about 2,000 to 4,000 · ' +
+        'turbulent above about 4,000.</p>' +
+        '<small>General reference, not from the PDF.</small></details>'
+      : '';
+    return '<div class="step-body">' +
+      `<h2 aria-live="polite">${step.id} · ${step.title}</h2>` +
+      `<p aria-live="polite">${step.text}</p>` + chipsHtml(step) + empty +
+      '<div id="inline-part" hidden></div>' + note + '</div>';
+  }
+  function controlsHtml(index) {
+    return '<div class="step-controls">' +
+      `<button id="step-back" ${index === 0 ? 'disabled' : ''}>‹ Back</button>` +
+      `<button id="step-next">${index === 10 ? 'Finish' : 'Next ›'}</button></div>`;
+  }
+  function completionHtml() {
+    return '<div class="completion-icon">✓</div><h2>Procedure complete</h2>' +
+      "<p>You've walked through all 11 steps of the Reynolds Apparatus procedure.</p>" +
+      phaseStripHtml(procedure[10], true) + '<div class="step-controls">' +
+      '<button id="restart-procedure">Restart</button>' +
+      '<button id="done-procedure">Done</button></div>';
+  }
+  function rowHtml(step) {
+    const current = step.number - 1 === procedureState.index;
+    const status = current ? 'Current' : visited.has(step.number - 1) ? '✓' : '';
+    return `<button data-step="${step.number - 1}" class="${current ? 'current' : ''}" ` +
+      `${current ? 'aria-current="step"' : ''}>` +
+      `<b>${step.id}</b><span>${step.title}</span><small>${status}</small></button>`;
   }
   function startProcedure(restart = false) {
     clearSelection();
@@ -379,7 +443,7 @@ try {
       visited.add(procedureState.index);
     procedureState = {index, complete: false, rendered: true};
     procedureFocus = null;
-    if (index > 0 || chosen || savedStep !== null) saveStep(index);
+    saveStep(index === 0 && !chosen ? null : index);
     closeSheet(false);
     hideToast();
     clearStepHighlights();
@@ -387,9 +451,9 @@ try {
     clearHighlight(selectionHighlight);
     const step = procedure[index];
     panel.hidden = false;
-    panel.innerHTML =
-      phaseStrip(step) +
-      `<progress max="11" value="${index + 1}" aria-label="Procedure progress"></progress><div class="meta"><button id="step-list">Step ${index + 1} of 11 ⌄</button><button id="step-exit" aria-label="Exit procedure">×</button></div><div class="step-body"><h2 aria-live="polite">${step.id} · ${step.title}</h2><p aria-live="polite">${step.text}</p><div class="chips">${step.parts.map((part, i) => `<button data-part="${i}">${part}${part === 'Control Valve' && step.focus === 'rear' ? ' (ball valves)' : ''}</button>`).join('')}</div>${!step.parts.length ? '<p class="muted">No part to highlight. The whole apparatus is shown.</p>' : ''}<div id="inline-part" hidden></div>${step.id === 'B4' && SHOW_REYNOLDS_NOTE ? '<details><summary>How to calculate N<sub>RE</sub></summary><p>N<sub>RE</sub> = ρvD/μ = 4Q/(πDν)</p><p>Laminar below about 2,000 · transitional about 2,000 to 4,000 · turbulent above about 4,000.</p><small>General reference, not from the PDF.</small></details>' : ''}</div><div class="step-controls"><button id="step-back" ${index === 0 ? 'disabled' : ''}>‹ Back</button><button id="step-next">${index === 10 ? 'Finish' : 'Next ›'}</button></div>`;
+    panel.innerHTML = phaseStripHtml(step) +
+      `<progress max="11" value="${index + 1}" aria-label="Procedure progress"></progress>` +
+      metaRowHtml(index) + stepBodyHtml(step) + controlsHtml(index);
     panel.querySelector('#step-exit').onclick = endProcedure;
     panel.querySelector('#step-list').onclick = openSheet;
     panel.querySelector('#step-back').onclick = prevStep;
@@ -409,7 +473,7 @@ try {
       );
       stepHighlights.push(list);
     }
-    scheduleProcedureFrame();
+    scheduleProcedureFrame('step');
   }
   function showStepPart(part, mesh) {
     const row = panel.querySelector('#inline-part');
@@ -424,7 +488,7 @@ try {
     back.onclick = () => {
       row.hidden = true;
       procedureFocus = null;
-      scheduleProcedureFrame();
+      scheduleProcedureFrame('back');
     };
     row.append(back);
     const meshes =
@@ -432,7 +496,7 @@ try {
         ? (valveOf.get(mesh) ?? valveMeshes(procedure[procedureState.index]))
         : [partGroups[part]];
     procedureFocus = {part, meshes};
-    scheduleProcedureFrame();
+    scheduleProcedureFrame('part');
   }
   function procedureTap(hit) {
     if (procedureState.complete) return;
@@ -471,14 +535,14 @@ try {
     saveStep(null);
     clearStepHighlights();
     hideToast();
-    panel.innerHTML = `<div class="completion-icon">✓</div><h2>Procedure complete</h2><p>You've walked through all 11 steps of the Reynolds Apparatus procedure.</p>${phaseStrip(procedure[10], true)}<div class="step-controls"><button id="restart-procedure">Restart</button><button id="done-procedure">Done</button></div>`;
+    panel.innerHTML = completionHtml();
     panel.querySelector('#restart-procedure').onclick = () => {
       visited.clear();
       saveStep(null);
       startProcedure(true);
     };
     panel.querySelector('#done-procedure').onclick = endProcedure;
-    scheduleProcedureFrame();
+    scheduleProcedureFrame('step');
     panel.querySelector('#done-procedure').focus();
   }
   function endProcedure() {
@@ -499,18 +563,10 @@ try {
     document.querySelector('#visited-count').textContent =
       `${visited.size} of 11 steps visited`;
     const rows = document.querySelector('#step-rows');
-    rows.innerHTML = ['A', 'B', 'C']
-      .map(
-        (phase) =>
-          `<h3>${phase} · ${phases[phase]}</h3>${procedure
-            .filter((s) => s.phase === phase)
-            .map(
-              (s) =>
-                `<button data-step="${s.number - 1}" class="${s.number - 1 === procedureState.index ? 'current' : ''}" ${s.number - 1 === procedureState.index ? 'aria-current="step"' : ''}><b>${s.id}</b><span>${s.title}</span><small>${s.number - 1 === procedureState.index ? 'Current' : visited.has(s.number - 1) ? '✓' : ''}</small></button>`
-            )
-            .join('')}`
-      )
-      .join('');
+    rows.innerHTML = ['A', 'B', 'C'].map((phase) => {
+      const rows = procedure.filter((step) => step.phase === phase).map(rowHtml);
+      return `<h3>${phase} · ${phases[phase]}</h3>${rows.join('')}`;
+    }).join('');
     rows.querySelectorAll('button').forEach(
       (button) =>
         (button.onclick = () => {
@@ -593,7 +649,27 @@ try {
       openSheet();
     }
   });
-  new ResizeObserver(scheduleProcedureFrame).observe(panel);
+  new ResizeObserver(() => scheduleProcedureFrame('panel')).observe(panel);
+  const gesturePointers = new Map();
+  renderer.domElement.addEventListener('pointerdown', (event) => {
+    if (procedureState && event.isTrusted)
+      gesturePointers.set(event.pointerId, {x: event.clientX, y: event.clientY});
+  });
+  renderer.domElement.addEventListener('pointermove', (event) => {
+    const start = gesturePointers.get(event.pointerId);
+    if (procedureState && orbiting && event.isTrusted && start &&
+      Math.hypot(event.clientX - start.x, event.clientY - start.y) >= TAP_MOVE_THRESHOLD)
+      userMoved = true;
+  });
+  for (const type of ['pointerup', 'pointercancel']) {
+    renderer.domElement.addEventListener(type, (event) => {
+      gesturePointers.delete(event.pointerId);
+    });
+  }
+  renderer.domElement.addEventListener('wheel', (event) => {
+    if (procedureState && controls.enabled && event.isTrusted && event.deltaY !== 0)
+      userMoved = true;
+  }, {passive: true});
   controls.addEventListener('start', () => {
     orbiting = true;
     if (reframeRequest) {
@@ -603,17 +679,23 @@ try {
   });
   controls.addEventListener('end', () => {
     orbiting = false;
-    if (reframePending) scheduleProcedureFrame();
+    if (reframePending) scheduleProcedureFrame(reframePending);
   });
-  function scheduleProcedureFrame() {
+  function scheduleProcedureFrame(reason) {
     if (!procedureState) return;
-    reframePending = true;
+    if (reason !== 'panel') userMoved = false;
+    // An explicit focus change takes priority over a panel resize in the same frame.
+    if (!reframePending || reason !== 'panel') reframePending = reason;
     if (orbiting || reframeRequest) return;
     reframeRequest = requestAnimationFrame(() => {
       reframeRequest = 0;
       if (!procedureState || orbiting) return;
-      reframePending = false;
-      if (procedureFocus) {
+      const reason = reframePending;
+      reframePending = null;
+      if (reason === 'panel' && userMoved) {
+        panelOffset = panelHeight();
+        applyProjection();
+      } else if (procedureFocus) {
         const {part, meshes} = procedureFocus;
         if (LARGE_PARTS.includes(part)) {
           controls.minDistance = DEFAULT_MIN_DISTANCE;
@@ -631,7 +713,18 @@ try {
   }
 
   // Development-only hook for the automated interaction check; stripped from production builds.
-  if(import.meta.env.DEV)window.__viewer={camera,controls,model,partGroups,valveOf,pick:(clientX,clientY)=>partAtPointer({clientX,clientY})?.part??null,pickMesh:(clientX,clientY)=>partAtPointer({clientX,clientY})?.mesh??null,isMoving:()=>!!move||!!reframeRequest,focusTarget:()=>controls.target.clone(),procedure:()=>procedureState?{...procedureState,visited:[...visited],highlightedParts:procedureState.complete?[]:procedure[procedureState.index].parts}:null,stepMeshes,startProcedure,goToStep};
+  if(import.meta.env.DEV)window.__viewer={
+    camera,controls,model,partGroups,valveOf,
+    pick:(clientX,clientY)=>partAtPointer({clientX,clientY})?.part??null,
+    pickMesh:(clientX,clientY)=>partAtPointer({clientX,clientY})?.mesh??null,
+    isMoving:()=>!!move||!!reframeRequest,
+    focusTarget:()=>controls.target.clone(),
+    procedure:()=>procedureState?{
+      ...procedureState,visited:[...visited],
+      highlightedParts:procedureState.complete?[]:procedure[procedureState.index].parts
+    }:null,
+    stepMeshes,startProcedure,goToStep
+  };
   // ---- end PDF part selection ----
   let last=performance.now();
   renderer.setAnimationLoop(now=>{const delta=Math.min((now-last)/1000,.05);last=now;if(document.hidden)return;updateMove(delta);pulseHighlight(now);if(controls.enabled)controls.update(delta);renderer.render(scene,camera);});
