@@ -30,7 +30,7 @@ try {
   controls.enableDamping=true;controls.dampingFactor=.08;
   controls.minDistance=3;controls.maxDistance=36;
   controls.maxPolarAngle=Math.PI*.88;
-  controls.autoRotateSpeed=.7;
+  controls.autoRotateSpeed=-.7;
   controls.rotateSpeed=touchDevice?.65:1;
   controls.touches.ONE=THREE.TOUCH.ROTATE;
   controls.touches.TWO=THREE.TOUCH.DOLLY_PAN;
@@ -713,6 +713,45 @@ try {
     toast.hidden = true;
   }
 
+  // Idle presentation uses OrbitControls; the apparatus itself never moves.
+  const IDLE_DELAY=3*60*1000;
+  const idlePointers=new Set(),idleKeys=new Set();
+  let lastActivity=performance.now();
+  function resetIdleTimer() {
+    lastActivity=performance.now();
+    if(controls.autoRotate){
+      controls.autoRotate=false;
+      const enabled=controls.enabled;
+      settleControls();
+      controls.enabled=enabled;
+    }
+  }
+  for(const type of ['pointerdown','pointermove','pointerup','pointercancel',
+    'wheel','keydown','keyup','input','click']){
+    window.addEventListener(type,event=>{
+      if(!event.isTrusted)return;
+      if(type==='pointerdown')idlePointers.add(event.pointerId);
+      if(type==='pointerup'||type==='pointercancel')idlePointers.delete(event.pointerId);
+      if(type==='keydown')idleKeys.add(event.code);
+      if(type==='keyup')idleKeys.delete(event.code);
+      resetIdleTimer();
+    },{capture:true,passive:true});
+  }
+  function resetIdleSession() {
+    idlePointers.clear();
+    idleKeys.clear();
+    resetIdleTimer();
+  }
+  window.addEventListener('blur',resetIdleSession);
+  window.addEventListener('focus',resetIdleSession);
+  document.addEventListener('visibilitychange',resetIdleSession);
+  reducedMotion.addEventListener('change',resetIdleTimer);
+  function updateIdleRotation(now) {
+    controls.autoRotate=now-lastActivity>=IDLE_DELAY && !reducedMotion.matches &&
+      idlePointers.size===0 && idleKeys.size===0 && !orbiting &&
+      controls.enabled && !move && !reframeRequest;
+  }
+
   // Development-only hook for the automated interaction check; stripped from production builds.
   if(import.meta.env.DEV)window.__viewer={
     camera,controls,model,partGroups,valveOf,
@@ -728,7 +767,16 @@ try {
   };
   // ---- end PDF part selection ----
   let last=performance.now();
-  renderer.setAnimationLoop(now=>{const delta=Math.min((now-last)/1000,.05);last=now;if(document.hidden)return;updateMove(delta);pulseHighlight(now);if(controls.enabled)controls.update(delta);renderer.render(scene,camera);});
+  renderer.setAnimationLoop(now=>{
+    const delta=Math.min((now-last)/1000,.05);
+    last=now;
+    if(document.hidden)return;
+    updateMove(delta);
+    pulseHighlight(now);
+    updateIdleRotation(now);
+    if(controls.enabled)controls.update(delta);
+    renderer.render(scene,camera);
+  });
   loading.hidden=true;loading.style.display='none';
   renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();loading.textContent='The 3D view was interrupted. Refresh to reload.';loading.style.display='grid';});
 } catch(error) {
