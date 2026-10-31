@@ -12,8 +12,12 @@
       <section id="part-info" aria-label="Selected part" aria-hidden="true" aria-live="polite">
         <button id="part-info-close" aria-label="Close part information">×</button>
         <strong id="part-info-label"></strong>
-        <p id="part-info-purpose"></p>
+        <p id="part-info-purpose"></p><button class="text-link" id="part-start">Start procedure</button>
       </section>
+      <div id="procedure-entry"><button id="procedure-start">Start procedure</button><button id="start-over" class="text-link" hidden>Start over</button><p>or tap any part to learn what it does</p></div>
+      <section id="procedure-panel" role="region" aria-label="Operating procedure" hidden></section>
+      <div id="procedure-toast" role="status" hidden></div>
+      <div id="step-backdrop" hidden><section id="step-sheet" role="dialog" aria-modal="true" aria-label="Operating procedure steps"><button id="sheet-handle" aria-label="Close step list"></button><button id="sheet-close" aria-label="Close step list">×</button><h2>Operating procedure</h2><p id="visited-count"></p><div id="step-rows"></div></section></div>
       <div id="loading" role="status" aria-label="Loading apparatus">
         <img src="/apparatus-loading.svg" alt="" width="360" height="507" fetchpriority="high" />
       </div>
