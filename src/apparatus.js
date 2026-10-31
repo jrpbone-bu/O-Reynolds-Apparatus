@@ -30,6 +30,23 @@ export function createApparatus() {
     box(frame,'Reservoir end upright',rail,deck,rail,m.black,R,deck/2+.08,z);
   }
   for(const x of [L,T,R])for(const y of [base,deck])box(frame,'Base depth tie',rail,rail,depth,m.black,x,y);
+  // Artist's mark: "jrpbone" as a black silhouette on the underside of the front base rail, only seen from below.
+  if(typeof document!=='undefined'){
+    const c=document.createElement('canvas');c.width=1024;c.height=256;const g=c.getContext('2d');
+    g.fillStyle='#fff';g.font='800 190px Arial,Helvetica,sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText('jrpbone',512,132);
+    const t=new THREE.CanvasTexture(c);t.anisotropy=8;
+    // Same colour and finish as the rail, so from a normal distance it disappears into the black base.
+    const mat=new THREE.MeshStandardMaterial({color:'#20262b',metalness:.55,roughness:.4,alphaMap:t,alphaTest:.5,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+    const mark=mesh(frame,'Artist mark',new THREE.PlaneGeometry(.56,.14),mat,[1.9,base-rail/2-.002,depth/2]);
+    mark.rotation.x=Math.PI/2;mark.castShadow=false;mark.receiveShadow=false;mark.raycast=()=>{};
+    // Zoomed in close, it darkens to a matte silhouette: fully shown within 2.5 units, gone beyond 4.5.
+    const railColor=new THREE.Color('#20262b'),inkColor=new THREE.Color('#0a0c0d'),markPos=new THREE.Vector3();
+    mark.onBeforeRender=(renderer,scene,camera)=>{
+      mark.getWorldPosition(markPos);
+      const k=1-THREE.MathUtils.smoothstep(camera.position.distanceTo(markPos),2.5,4.5);
+      mat.color.lerpColors(railColor,inkColor,k);mat.metalness=.55*(1-k);mat.roughness=.4+.55*k;
+    };
+  }
   // Guardrails share the existing tower footprint; only the chamber and its seat are inset.
   const trayWidth=T-L+rail, trayDepth=depth+rail, trayCenter=(L+T)/2;
   const trayLeft=trayCenter-trayWidth/2+rail/2, trayRight=trayCenter+trayWidth/2-rail/2;
