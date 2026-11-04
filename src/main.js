@@ -373,15 +373,53 @@ try {
         instant
       );
   }
+  // Group credits: a fourth tab after Cleanup, shown without a letter.
+  const GROUP = {
+    apparatus: "Reynolds' Apparatus",
+    course: 'Chemical Engineering Laboratory 2',
+    section: 'BS Chemical Engineering 4B',
+    term: '1st Semester, S.Y. 2026-2027',
+    members: ['Ian M. Fortes', 'Nicole V. Resare', 'Angelika B. Cuachin',
+      'Abegail H. Benitez', 'Shayne B. Bonayon', 'Christian Jay N. Ludovice']
+  };
+  const TABS = [['A', 'A · Setup'], ['B', 'B · Operation'],
+    ['C', 'C · Cleanup'], ['group', 'Group']];
   function phaseStripHtml(step, complete = false) {
-    const segments = ['A', 'B', 'C'].map((phase, i) => {
-      const past = complete || phase < step.phase;
-      const state = past ? 'past' : phase === step.phase ? 'current' : '';
-      return `<div class="${state}"><span></span>` +
-        `${phase} · ${['Setup', 'Operation', 'Cleanup'][i]}` +
-        `${past ? ' ✓' : ''}</div>`;
+    const currentTab = TABS.findIndex(([key]) => key === step.phase);
+    const segments = TABS.map(([, label], i) => {
+      const past = complete || i < currentTab;
+      const state = past ? 'past' : i === currentTab ? 'current' : '';
+      return `<div class="${state}"><span></span>${label}${past ? ' ✓' : ''}</div>`;
     });
     return `<div class="phase-strip">${segments.join('')}</div>`;
+  }
+  function groupHtml() {
+    const rows = [['Course', GROUP.course], ['Section', GROUP.section], ['Term', GROUP.term]]
+      .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+    const names = GROUP.members.map((name) => `<li>${name}</li>`).join('');
+    return phaseStripHtml({phase: 'group'}) +
+      '<progress max="11" value="11" aria-label="Procedure progress"></progress>' +
+      '<div class="meta"><span>Group members</span>' +
+      '<button id="step-exit" aria-label="Exit procedure">×</button></div>' +
+      `<div class="step-body"><dl class="group-rows">${rows}</dl><ul class="group-names">${names}</ul></div>` +
+      '<div class="step-controls"><button id="group-back">‹ Back</button>' +
+      '<button id="group-finish">Finish</button></div>';
+  }
+  function showGroup() {
+    visited.add(10);
+    procedureState = {index: 10, complete: true, group: true, rendered: true};
+    procedureFocus = null;
+    saveStep(null);
+    closeSheet(false);
+    clearStepHighlights();
+    hideToast();
+    panel.hidden = false;
+    panel.innerHTML = groupHtml();
+    panel.querySelector('#step-exit').onclick = endProcedure;
+    panel.querySelector('#group-back').onclick = () => goToStep(10, true);
+    panel.querySelector('#group-finish').onclick = showCompletion;
+    scheduleProcedureFrame('step');
+    panel.querySelector('#group-finish').focus({preventScroll: true});
   }
   function metaRowHtml(index) {
     return `<div class="meta">` +
@@ -415,7 +453,7 @@ try {
   function controlsHtml(index) {
     return '<div class="step-controls">' +
       `<button id="step-back" ${index === 0 ? 'disabled' : ''}>‹ Back</button>` +
-      `<button id="step-next">${index === 10 ? 'Finish' : 'Next ›'}</button></div>`;
+      '<button id="step-next">Next ›</button></div>';
   }
   function completionHtml() {
     return '<div class="completion-icon">✓</div><h2>Procedure complete</h2>' +
@@ -425,7 +463,7 @@ try {
       '<button id="done-procedure">Done</button></div>';
   }
   function rowHtml(step) {
-    const current = step.number - 1 === procedureState.index;
+    const current = !procedureState.complete && step.number - 1 === procedureState.index;
     const status = current ? 'Current' : visited.has(step.number - 1) ? '✓' : '';
     return `<button data-step="${step.number - 1}" class="${current ? 'current' : ''}" ` +
       `${current ? 'aria-current="step"' : ''}>` +
@@ -530,8 +568,10 @@ try {
       goToStep(procedureState.index + 1);
       return;
     }
-    visited.add(10);
-    procedureState.complete = true;
+    showGroup();
+  }
+  function showCompletion() {
+    procedureState = {index: 10, complete: true, rendered: true};
     procedureFocus = null;
     saveStep(null);
     clearStepHighlights();
@@ -567,10 +607,12 @@ try {
     rows.innerHTML = ['A', 'B', 'C'].map((phase) => {
       const rows = procedure.filter((step) => step.phase === phase).map(rowHtml);
       return `<h3>${phase} · ${phases[phase]}</h3>${rows.join('')}`;
-    }).join('');
+    }).join('') + '<h3>Group</h3><button data-group>' +
+      `<b>★</b><span>Group members</span><small>${procedureState.group ? 'Current' : ''}</small></button>`;
     rows.querySelectorAll('button').forEach(
       (button) =>
         (button.onclick = () => {
+          if (button.dataset.group !== undefined) { showGroup(); return; }
           goToStep(+button.dataset.step, true);
           panel.querySelector('#step-next').focus();
         })
@@ -767,6 +809,36 @@ try {
   };
   // ---- end PDF part selection ----
   let last=performance.now();
+  // ---- marble interaction: drag the view to slosh the bed, tap the upper tank to stir it ----
+  const marbles=model.userData.marbles;
+  let marbleDragging=false;const lastCamDir=new THREE.Vector3();
+  controls.addEventListener('start',()=>{marbleDragging=true;lastCamDir.copy(camera.position).sub(controls.target).normalize();});
+  controls.addEventListener('end',()=>{marbleDragging=false;});
+  const marbleTankGroup=model.getObjectByName('Upper Water Tank'),marbleBed=model.getObjectByName('04 — marble bed in upper tank base');
+  viewport.addEventListener('pointerdown',event=>{
+    if(!marbles||event.target.closest?.('.part-chips')||event.target!==renderer.domElement)return;
+    const rect=renderer.domElement.getBoundingClientRect();
+    const ndc=new THREE.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
+    const ray=new THREE.Raycaster();ray.setFromCamera(ndc,camera);
+    const hit=ray.intersectObjects([marbleBed,marbleTankGroup].filter(Boolean),true)[0];
+    if(hit){const local=model.worldToLocal(hit.point.clone());marbles.stir(1,0,0,{x:local.x,z:local.z});}
+  });
+  function updateMarbles(delta){
+    if(!marbles)return;
+    if(marbleDragging){
+      const dir=camera.position.clone().sub(controls.target).normalize();
+      const turn=dir.clone().sub(lastCamDir);lastCamDir.copy(dir);
+      const amount=turn.length();
+      if(amount>.002){
+        // marbles roll opposite to the way the view swings, like tilting the tank
+        const local=turn.applyQuaternion(model.quaternion.clone().invert());
+        const len=Math.hypot(local.x,local.z)||1;
+        marbles.stir(Math.min(.6,amount*6),-local.x/len,-local.z/len);
+      }
+    }
+    marbles.update(delta);
+  }
+
   renderer.setAnimationLoop(now=>{
     const delta=Math.min((now-last)/1000,.05);
     last=now;
@@ -775,6 +847,7 @@ try {
     pulseHighlight(now);
     updateIdleRotation(now);
     if(controls.enabled)controls.update(delta);
+    updateMarbles(delta);
     renderer.render(scene,camera);
   });
   loading.hidden=true;loading.style.display='none';

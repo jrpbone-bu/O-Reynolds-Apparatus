@@ -240,7 +240,79 @@ export function createApparatus() {
   for(const g of Object.values(partGroups))model.add(g);
   for(const [object,name] of assignments)partGroups[name].attach(object);
   for(const container of previousContainers)container.removeFromParent();
-  model.userData={revision:'Top Glass Tank',units:'relative; dimensions unmeasured',reference:'Revision K plus construction photographs'};
+  // Marble bed: glass marbles poured into the black housing at the base of the upper glass tank (04).
+  // They fill from the housing floor up to the rim of the black base and no further (bedTop).
+  // Marbles roll and settle when the user drags the view or taps the tank.
+  {
+    const marbles=new THREE.Group();marbles.name='04 — marble bed in upper tank base';model.add(marbles);   // the part regroup above removes 'artifact' from the scene
+    const r=.05, wall=.05+.01, floorTop=platformTop+.045;           // housing walls are .05 thick; underside plate is .045 thick
+    const bedTop=housingTop+.03;                                     // highest marble top: just peeks over the black rim, like the photo
+    const minX=cx-width/2+wall+r, maxX=cx+width/2-wall-r, minZ=-tankDepth/2+wall+r, maxZ=tankDepth/2-wall-r;
+    const minY=floorTop+r, maxY=bedTop-r, sleeveClear=.095+r+.012;   // keep clear of the white needle sleeve / thin pipe at the centre
+    const cornerClear=post+r;                                        // and of the four black corner pillars
+    const allowed=(x,z)=>{const dx=x-cx;if(Math.hypot(dx,z)<sleeveClear)return false;
+      const ex=Math.min(Math.abs(x-(cx-width/2)),Math.abs(x-(cx+width/2))),ez=Math.min(Math.abs(z+tankDepth/2),Math.abs(z-tankDepth/2));
+      return !(ex<cornerClear&&ez<cornerClear);};
+    let seed=11;const rand=()=>((seed=(seed*16807)%2147483647)/2147483647);
+    // Clear glass marbles with green / blue / amber tints, as in the build photo.
+    const glass=(c,o)=>new THREE.MeshStandardMaterial({color:c,roughness:.05,metalness:.0,transparent:true,opacity:o});
+    const palette=[glass('#e4f2ec',.55),glass('#9fd3ad',.7),glass('#7fb4dd',.7),glass('#c9e6cf',.6),glass('#2f6fc0',.8),glass('#d8b56a',.7)];
+    const weights=[.3,.25,.15,.15,.08,.07];
+    const pick=()=>{let t=rand();for(let i=0;i<weights.length;i++){if((t-=weights[i])<=0)return i;}return 0;};
+    const geo=new THREE.SphereGeometry(r,16,12);
+    const pts=[];const step=r*2*.98, rowZ=step*.866, layerY=r*1.63;
+    for(let layer=0;;layer++){
+      const y=minY+layer*layerY; if(y>maxY+1e-6)break;
+      const off=layer%2?step/2:0, top=minY+(layer+1)*layerY>maxY+1e-6;
+      for(let zi=0;minZ+zi*rowZ<=maxZ;zi++){const z=minZ+zi*rowZ+(layer%2?rowZ/3:0); if(z>maxZ)continue;
+        for(let xi=0;;xi++){const x=minX+xi*step+(zi%2?step/2:0)+off; if(x>maxX)break;
+          if(!allowed(x,z))continue;
+          if(top&&rand()<.25)continue;                               // top layer has gaps so it looks poured, not stacked
+          pts.push({rest:[x+(rand()-.5)*.012,Math.max(minY,y-rand()*.008),z+(rand()-.5)*.012],top});}}
+    }
+    for(const p of pts){p.rest[0]=THREE.MathUtils.clamp(p.rest[0],minX,maxX);p.rest[2]=THREE.MathUtils.clamp(p.rest[2],minZ,maxZ);if(!allowed(p.rest[0],p.rest[2])){p.rest[0]=cx+(p.rest[0]-cx)*.97;p.rest[2]*=.97;}}
+    const meshes=[];const mtx=new THREE.Matrix4(), euler=new THREE.Euler();
+    const buckets=palette.map(()=>[]);pts.forEach(p=>buckets[pick()].push(p));
+    buckets.forEach((list,i)=>{if(!list.length)return;const inst=new THREE.InstancedMesh(geo,palette[i],list.length);inst.name='Upper tank marbles';
+      inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      list.forEach((p,k)=>{p.off=[0,0,0];p.vel=[0,0,0];p.mobility=(p.top?1:.45)*(.7+rand()*.6);mtx.makeTranslation(...p.rest);inst.setMatrixAt(k,mtx);});
+      inst.instanceMatrix.needsUpdate=true;inst.castShadow=false;inst.receiveShadow=true;inst.frustumCulled=false;inst.raycast=()=>{};marbles.add(inst);   // taps pass through to the Upper Water Tank part
+      meshes.push({inst,list});});
+    let energy=0;const maxOff=r*1.1;
+    // stir(strength 0..1, dirX, dirZ, point?) — dir is the roll direction in model space, point is a tap location (model x,z).
+    function stir(strength,dirX=0,dirZ=0,point=null){
+      for(const {list} of meshes)for(const p of list){
+        let s=strength*p.mobility,dx0=dirX,dz0=dirZ;
+        if(point){const dx=p.rest[0]-point.x,dz=p.rest[2]-point.z,d=Math.hypot(dx,dz);s*=Math.max(0,1-d/.75);if(d>1e-4){dx0=dx/d;dz0=dz/d;}}
+        if(s<=0)continue;
+        p.vel[0]+=(dx0*.9+(rand()-.5)*.8)*s*.9; p.vel[2]+=(dz0*.9+(rand()-.5)*.8)*s*.9;
+        if(p.top)p.vel[1]+=rand()*s*.35;
+      }
+      energy=1;
+    }
+    function update(dt){
+      if(energy<=0)return;
+      let moving=0;
+      for(const {inst,list} of meshes){list.forEach((p,k)=>{
+        for(let a=0;a<3;a++){p.vel[a]+=(-p.off[a]*38-p.vel[a]*5.5)*dt;p.off[a]+=p.vel[a]*dt;}
+        
+        for(const a of [0,2]){if(Math.abs(p.off[a])>maxOff){p.off[a]=Math.sign(p.off[a])*maxOff;p.vel[a]*=-.3;}}
+        let x=THREE.MathUtils.clamp(p.rest[0]+p.off[0],minX,maxX), z=THREE.MathUtils.clamp(p.rest[2]+p.off[2],minZ,maxZ);
+        const dx=x-cx,d=Math.hypot(dx,z);if(d<sleeveClear){const s=sleeveClear/(d||1e-4);x=cx+dx*s;z*=s;}   // pushed off the sleeve
+        if(!allowed(x,z)){x=p.rest[0];z=p.rest[2];p.vel[0]=p.vel[2]=0;}
+        p.off[0]=x-p.rest[0];p.off[2]=z-p.rest[2];
+        let y=p.rest[1]+p.off[1];if(y<p.rest[1]){y=p.rest[1];p.off[1]=0;p.vel[1]=Math.max(0,p.vel[1]);}
+        if(y>maxY){y=maxY;p.off[1]=y-p.rest[1];p.vel[1]=Math.min(0,p.vel[1]);}                                          // hard cap: never above the bed line
+        euler.set(p.off[2]/r,0,-p.off[0]/r);mtx.makeRotationFromEuler(euler);mtx.setPosition(x,y,z);inst.setMatrixAt(k,mtx);
+        moving=Math.max(moving,Math.abs(p.vel[0])+Math.abs(p.vel[1])+Math.abs(p.vel[2])+Math.abs(p.off[0])+Math.abs(p.off[2]));
+      });inst.instanceMatrix.needsUpdate=true;}
+      if(moving<.0015){energy=0;for(const {inst,list} of meshes){list.forEach((p,k)=>{p.off.fill(0);p.vel.fill(0);mtx.makeTranslation(...p.rest);inst.setMatrixAt(k,mtx);});inst.instanceMatrix.needsUpdate=true;}}                                      // fully settled: stop updating
+    }
+    marbles.userData={floorTop,bedTop,count:pts.length,stir,update,bounds:{minX:minX-r,maxX:maxX+r,minZ:minZ-r,maxZ:maxZ+r,minY:floorTop,maxY:bedTop}};
+    model.userData.marbles=marbles.userData;
+  }
+
+  model.userData={...model.userData,revision:'Top Glass Tank',units:'relative; dimensions unmeasured',reference:'Revision K plus construction photographs'};
   return model;
 }
 
